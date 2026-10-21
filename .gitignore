@@ -1,0 +1,19 @@
+# Build output
+/target/
+/launcher/target/
+/app/node_modules/
+/app/dist/
+/app/src-tauri/target/
+__pycache__/
+*.pyc
+
+# Never commit anything derived from the game (workspace CLAUDE.md: never ship game data). Built mods, stencils,
+# previews and thumbnails rendered from game assets, and statistics computed from game files are all regenerated
+# from the player's own install.
+/prototypes/**/Caveman-*/
+/prototypes/**/previews/
+/prototypes/**/*Stencil*.png
+/assets/stock_outline_probability.npz
+*.cas
+*.toc
+initfs_win32

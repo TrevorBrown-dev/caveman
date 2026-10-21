@@ -1,0 +1,17 @@
+[package]
+name = "caveman-cli"
+description = "caveman: build folders of PNGs into ReSkate decks and wheels"
+edition.workspace = true
+version.workspace = true
+
+[lib]
+name = "caveman_cli"
+path = "src/lib.rs"
+
+[[bin]]
+name = "caveman"
+path = "src/main.rs"
+
+[dependencies]
+caveman-core = { path = "../caveman-core" }
+serde_json = "1"      # --json output

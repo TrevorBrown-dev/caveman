@@ -1,0 +1,32 @@
+[package]
+name = "caveman-fx"
+description = "caveman_fx.dll: Caveman FX's native side, loaded into skate. (fx states from the skater's tricks, for FX decks; the DLL's own overlay drawing)"
+edition.workspace = true
+version.workspace = true
+
+[lib]
+name = "caveman_fx"
+# the cdylib is the DLL injected into the game; the rlib lets the trainer and the tests share its protocol and rules
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+# Most Windows APIs are declared by hand (src/win.rs), as caveman-core does; Direct3D 12, DXGI and WASAPI are COM, and
+# come from the `windows` crate (0.54: it links through import libraries, so the GNU toolchain needs no dlltool).
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[dependencies.windows]
+version = "0.54"
+features = [
+    "Win32_Foundation",
+    "Win32_Graphics_Direct3D",
+    "Win32_Graphics_Direct3D12",
+    "Win32_Graphics_Direct3D_Fxc",
+    "Win32_Graphics_Dxgi",
+    "Win32_Graphics_Dxgi_Common",
+    "Win32_Graphics_Gdi",
+    "Win32_Media_Audio",
+    "Win32_System_Com",
+    "Win32_System_LibraryLoader",
+    "Win32_UI_WindowsAndMessaging",
+]

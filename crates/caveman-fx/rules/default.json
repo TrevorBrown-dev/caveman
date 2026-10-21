@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "note": "Caveman FX default rules (docs/fx-hook-plan.md). Each fx state is a BoolAsset Animation/Caveman/FX.<Name> in the Caveman-FX mod; FX decks trigger on them. pulse rules suit OneOff decks (bursts), level rules Continuous ones (auras, trails).",
+  "rules": [
+    { "fx": "fx.kickflip", "when": "flip == kickflip", "mode": "pulse", "cooldown_ms": 300, "note": "one shot as the kickflip starts" },
+    { "fx": "fx.heelflip", "when": "flip == heelflip", "mode": "pulse", "cooldown_ms": 300 },
+    { "fx": "fx.shuvit", "when": "flip in [popshuvit, fspopshuvit, 360popshuvit, fs360popshuvit, n_popshuvit, n_fspopshuvit, n_360popshuvit, n_fs360popshuvit]", "mode": "pulse", "cooldown_ms": 300 },
+    { "fx": "fx.flip", "when": "flip not in [none, ollie, nollie, olliepop, n_olliepop, wallie, fswallie, bswallie, bonedollie]", "note": "while any flip trick plays" },
+    { "fx": "fx.grind", "when": "grind" },
+    { "fx": "fx.grind.start", "when": "grind", "mode": "pulse", "cooldown_ms": 300 },
+    { "fx": "fx.manual", "when": "manual", "hold_ms": 100 },
+    { "fx": "fx.landed", "when": "landing", "mode": "pulse", "cooldown_ms": 300 },
+    { "fx": "fx.trick.any", "when": "trick" },
+    { "fx": "fx.air", "when": "air && flip in [none, ollie, nollie, olliepop, n_olliepop, wallie, fswallie, bswallie, bonedollie]", "note": "in the air but not flipping: fx.flip takes over during a flip trick, so the two auras never show together" },
+    { "fx": "fx.powerslide", "when": "powerslide" },
+    { "fx": "fx.grab", "when": "grab" },
+    { "fx": "fx.wipeout", "when": "wipeout", "mode": "pulse", "cooldown_ms": 1000 }
+  ]
+}

@@ -1,0 +1,13 @@
+[workspace]
+resolver = "2"
+members = ["crates/caveman-core", "crates/caveman-cli", "crates/caveman-fx", "crates/caveman-trainer", "launcher", "app/src-tauri"]
+# app/src-tauri is the Tauri app (app/README.md): it needs the MinGW tools on PATH, so a plain `cargo build` here leaves it out
+default-members = ["crates/caveman-core", "crates/caveman-cli", "crates/caveman-fx", "crates/caveman-trainer", "launcher"]
+# launcher/ builds caveman-launcher.exe, installed as Caveman.exe beside ReSkateLauncher.exe (it runs the build in process)
+
+[workspace.package]
+edition = "2021"
+version = "0.1.0"
+
+[profile.release]
+opt-level = 3

@@ -1,0 +1,447 @@
+{
+  "config": {
+    "cache": "C:\\Users\\thetr\\AppData\\Local\\Temp\\caveman-app-tests\\mock\\cache",
+    "decks": "C:\\Users\\thetr\\AppData\\Local\\Temp\\caveman-app-tests\\mock\\decks",
+    "game": "E:\\Games\\ReSkate",
+    "out": "C:\\Users\\thetr\\AppData\\Local\\Temp\\caveman-app-tests\\mock\\mods",
+    "wheels": "C:\\Users\\thetr\\AppData\\Local\\Temp\\caveman-app-tests\\mock\\wheels"
+  },
+  "fitted": {
+    "C:\\Users\\thetr\\AppData\\Local\\Temp\\caveman-app-tests\\mock\\decks\\000\\Dan Da Dan.aura.00ffff.png": {
+      "notes": [
+        "transparent parts show natural wood"
+      ],
+      "path": "C:\\Users\\thetr\\AppData\\Local\\Temp\\caveman-app-tests\\mock\\art\\3b3d3b9a7c1585b7.png"
+    },
+    "C:\\Users\\thetr\\AppData\\Local\\Temp\\caveman-app-tests\\mock\\decks\\000\\Dan Da Dan.aura.png": {
+      "notes": [
+        "transparent parts show natural wood"
+      ],
+      "path": "C:\\Users\\thetr\\AppData\\Local\\Temp\\caveman-app-tests\\mock\\art\\9df4927f09f91526.png"
+    },
+    "C:\\Users\\thetr\\AppData\\Local\\Temp\\caveman-app-tests\\mock\\decks\\000\\Dan Da Dan.cycle.png": {
+      "notes": [
+        "transparent parts show natural wood"
+      ],
+      "path": "C:\\Users\\thetr\\AppData\\Local\\Temp\\caveman-app-tests\\mock\\art\\5360a2adad528a72.png"
+    },
+    "C:\\Users\\thetr\\AppData\\Local\\Temp\\caveman-app-tests\\mock\\decks\\000\\Dan Da Dan.foil.png": {
+      "notes": [
+        "transparent parts show natural wood"
+      ],
+      "path": "C:\\Users\\thetr\\AppData\\Local\\Temp\\caveman-app-tests\\mock\\art\\b603015c18ccc647.png"
+    },
+    "C:\\Users\\thetr\\AppData\\Local\\Temp\\caveman-app-tests\\mock\\decks\\000\\Dan Da Dan.foil.spot.emboss.png": {
+      "notes": [
+        "transparent parts show natural wood"
+      ],
+      "path": "C:\\Users\\thetr\\AppData\\Local\\Temp\\caveman-app-tests\\mock\\art\\dce77619ea0ffc86.png"
+    },
+    "C:\\Users\\thetr\\AppData\\Local\\Temp\\caveman-app-tests\\mock\\decks\\000\\Dan Da Dan.glitter.png": {
+      "notes": [
+        "transparent parts show natural wood"
+      ],
+      "path": "C:\\Users\\thetr\\AppData\\Local\\Temp\\caveman-app-tests\\mock\\art\\6f190fbc3a1f80ec.png"
+    },
+    "C:\\Users\\thetr\\AppData\\Local\\Temp\\caveman-app-tests\\mock\\decks\\000\\Dan Da Dan.glow.png": {
+      "notes": [
+        "transparent parts show natural wood"
+      ],
+      "path": "C:\\Users\\thetr\\AppData\\Local\\Temp\\caveman-app-tests\\mock\\art\\d9146b5fce9ed553.png"
+    },
+    "C:\\Users\\thetr\\AppData\\Local\\Temp\\caveman-app-tests\\mock\\decks\\000\\Dan Da Dan.holo-cellular.png": {
+      "notes": [
+        "transparent parts show natural wood"
+      ],
+      "path": "C:\\Users\\thetr\\AppData\\Local\\Temp\\caveman-app-tests\\mock\\art\\3c91757e4e682bee.png"
+    },
+    "C:\\Users\\thetr\\AppData\\Local\\Temp\\caveman-app-tests\\mock\\decks\\000\\Dan Da Dan.holo-frost.png": {
+      "notes": [
+        "transparent parts show natural wood"
+      ],
+      "path": "C:\\Users\\thetr\\AppData\\Local\\Temp\\caveman-app-tests\\mock\\art\\f134512609baf482.png"
+    },
+    "C:\\Users\\thetr\\AppData\\Local\\Temp\\caveman-app-tests\\mock\\decks\\000\\Dan Da Dan.holo-glitter.png": {
+      "notes": [
+        "transparent parts show natural wood"
+      ],
+      "path": "C:\\Users\\thetr\\AppData\\Local\\Temp\\caveman-app-tests\\mock\\art\\ddeedb52dd368bf3.png"
+    },
+    "C:\\Users\\thetr\\AppData\\Local\\Temp\\caveman-app-tests\\mock\\decks\\000\\Dan Da Dan.holo-vertical.spot.png": {
+      "notes": [
+        "transparent parts show natural wood"
+      ],
+      "path": "C:\\Users\\thetr\\AppData\\Local\\Temp\\caveman-app-tests\\mock\\art\\394e9236c943ba4d.png"
+    },
+    "C:\\Users\\thetr\\AppData\\Local\\Temp\\caveman-app-tests\\mock\\decks\\000\\Dan Da Dan.holo.png": {
+      "notes": [
+        "transparent parts show natural wood"
+      ],
+      "path": "C:\\Users\\thetr\\AppData\\Local\\Temp\\caveman-app-tests\\mock\\art\\18e10b45d334af49.png"
+    },
+    "C:\\Users\\thetr\\AppData\\Local\\Temp\\caveman-app-tests\\mock\\decks\\000\\Dan Da Dan.nyan.png": {
+      "notes": [
+        "transparent parts show natural wood"
+      ],
+      "path": "C:\\Users\\thetr\\AppData\\Local\\Temp\\caveman-app-tests\\mock\\art\\04e64f309ba99933.png"
+    },
+    "C:\\Users\\thetr\\AppData\\Local\\Temp\\caveman-app-tests\\mock\\decks\\000\\Dan Da Dan.png": {
+      "notes": [
+        "transparent parts show natural wood"
+      ],
+      "path": "C:\\Users\\thetr\\AppData\\Local\\Temp\\caveman-app-tests\\mock\\art\\9174daa2afb7be65.png"
+    },
+    "C:\\Users\\thetr\\AppData\\Local\\Temp\\caveman-app-tests\\mock\\decks\\Test\\Test Pattern.png": {
+      "notes": [],
+      "path": "C:\\Users\\thetr\\AppData\\Local\\Temp\\caveman-app-tests\\mock\\art\\4e03332640916167.png"
+    }
+  },
+  "library": {
+    "decks": [
+      {
+        "colour": null,
+        "display": "000 - Dan Da Dan Aura 00FFFF",
+        "group": "000",
+        "key": "Own_000_-_Dan_Da_Dan_Aura_00FFFF",
+        "kind": "deck",
+        "modified": 1792539665610,
+        "notes": [],
+        "preview": "C:\\Users\\thetr\\AppData\\Local\\Temp\\caveman-app-tests\\mock\\decks\\previews\\000 - Dan Da Dan Aura 00FFFF.png",
+        "settings": {
+          "board": {
+            "colour": "#00ffff",
+            "effect": "aura"
+          },
+          "version": 1
+        },
+        "sidecar": false,
+        "sidecarPath": "C:\\Users\\thetr\\AppData\\Local\\Temp\\caveman-app-tests\\mock\\decks\\000\\Dan Da Dan.aura.00ffff.caveman.json",
+        "source": "C:\\Users\\thetr\\AppData\\Local\\Temp\\caveman-app-tests\\mock\\decks\\000\\Dan Da Dan.aura.00ffff.png",
+        "stem": "Dan Da Dan.aura.00ffff"
+      },
+      {
+        "colour": null,
+        "display": "000 - Dan Da Dan Aura",
+        "group": "000",
+        "key": "Own_000_-_Dan_Da_Dan_Aura",
+        "kind": "deck",
+        "modified": 1792539665543,
+        "notes": [],
+        "preview": "C:\\Users\\thetr\\AppData\\Local\\Temp\\caveman-app-tests\\mock\\decks\\previews\\000 - Dan Da Dan Aura.png",
+        "settings": {
+          "board": {
+            "effect": "aura"
+          },
+          "version": 1
+        },
+        "sidecar": false,
+        "sidecarPath": "C:\\Users\\thetr\\AppData\\Local\\Temp\\caveman-app-tests\\mock\\decks\\000\\Dan Da Dan.aura.caveman.json",
+        "source": "C:\\Users\\thetr\\AppData\\Local\\Temp\\caveman-app-tests\\mock\\decks\\000\\Dan Da Dan.aura.png",
+        "stem": "Dan Da Dan.aura"
+      },
+      {
+        "colour": null,
+        "display": "000 - Dan Da Dan Cycle",
+        "group": "000",
+        "key": "Own_000_-_Dan_Da_Dan_Cycle",
+        "kind": "deck",
+        "modified": 1792536676632,
+        "notes": [],
+        "preview": "C:\\Users\\thetr\\AppData\\Local\\Temp\\caveman-app-tests\\mock\\decks\\previews\\000 - Dan Da Dan Cycle.png",
+        "settings": {
+          "shader": {
+            "effect": "cycle",
+            "glow": 0.0,
+            "speed": 0.25
+          },
+          "version": 1
+        },
+        "sidecar": false,
+        "sidecarPath": "C:\\Users\\thetr\\AppData\\Local\\Temp\\caveman-app-tests\\mock\\decks\\000\\Dan Da Dan.cycle.caveman.json",
+        "source": "C:\\Users\\thetr\\AppData\\Local\\Temp\\caveman-app-tests\\mock\\decks\\000\\Dan Da Dan.cycle.png",
+        "stem": "Dan Da Dan.cycle"
+      },
+      {
+        "colour": null,
+        "display": "000 - Dan Da Dan Foil",
+        "group": "000",
+        "key": "Own_000_-_Dan_Da_Dan_Foil",
+        "kind": "deck",
+        "modified": 1792526255908,
+        "notes": [],
+        "preview": "C:\\Users\\thetr\\AppData\\Local\\Temp\\caveman-app-tests\\mock\\decks\\previews\\000 - Dan Da Dan Foil.png",
+        "settings": {
+          "finish": {
+            "kind": "foil"
+          },
+          "version": 1
+        },
+        "sidecar": false,
+        "sidecarPath": "C:\\Users\\thetr\\AppData\\Local\\Temp\\caveman-app-tests\\mock\\decks\\000\\Dan Da Dan.foil.caveman.json",
+        "source": "C:\\Users\\thetr\\AppData\\Local\\Temp\\caveman-app-tests\\mock\\decks\\000\\Dan Da Dan.foil.png",
+        "stem": "Dan Da Dan.foil"
+      },
+      {
+        "colour": null,
+        "display": "000 - Dan Da Dan Foil Spot Emboss",
+        "group": "000",
+        "key": "Own_000_-_Dan_Da_Dan_Foil_Spot_Emboss",
+        "kind": "deck",
+        "modified": 1792526255968,
+        "notes": [],
+        "preview": "C:\\Users\\thetr\\AppData\\Local\\Temp\\caveman-app-tests\\mock\\decks\\previews\\000 - Dan Da Dan Foil Spot Emboss.png",
+        "settings": {
+          "emboss": {
+            "strength": 4.0
+          },
+          "finish": {
+            "kind": "foil",
+            "spot": true
+          },
+          "version": 1
+        },
+        "sidecar": false,
+        "sidecarPath": "C:\\Users\\thetr\\AppData\\Local\\Temp\\caveman-app-tests\\mock\\decks\\000\\Dan Da Dan.foil.spot.emboss.caveman.json",
+        "source": "C:\\Users\\thetr\\AppData\\Local\\Temp\\caveman-app-tests\\mock\\decks\\000\\Dan Da Dan.foil.spot.emboss.png",
+        "stem": "Dan Da Dan.foil.spot.emboss"
+      },
+      {
+        "colour": null,
+        "display": "000 - Dan Da Dan Glitter",
+        "group": "000",
+        "key": "Own_000_-_Dan_Da_Dan_Glitter",
+        "kind": "deck",
+        "modified": 1792526255937,
+        "notes": [],
+        "preview": "C:\\Users\\thetr\\AppData\\Local\\Temp\\caveman-app-tests\\mock\\decks\\previews\\000 - Dan Da Dan Glitter.png",
+        "settings": {
+          "finish": {
+            "kind": "glitter"
+          },
+          "version": 1
+        },
+        "sidecar": false,
+        "sidecarPath": "C:\\Users\\thetr\\AppData\\Local\\Temp\\caveman-app-tests\\mock\\decks\\000\\Dan Da Dan.glitter.caveman.json",
+        "source": "C:\\Users\\thetr\\AppData\\Local\\Temp\\caveman-app-tests\\mock\\decks\\000\\Dan Da Dan.glitter.png",
+        "stem": "Dan Da Dan.glitter"
+      },
+      {
+        "colour": null,
+        "display": "000 - Dan Da Dan Glow",
+        "group": "000",
+        "key": "Own_000_-_Dan_Da_Dan_Glow",
+        "kind": "deck",
+        "modified": 1792539665660,
+        "notes": [],
+        "preview": "C:\\Users\\thetr\\AppData\\Local\\Temp\\caveman-app-tests\\mock\\decks\\previews\\000 - Dan Da Dan Glow.png",
+        "settings": {
+          "shader": {
+            "effect": "none",
+            "glow": 0.5019607843137255,
+            "speed": 0.25
+          },
+          "version": 1
+        },
+        "sidecar": false,
+        "sidecarPath": "C:\\Users\\thetr\\AppData\\Local\\Temp\\caveman-app-tests\\mock\\decks\\000\\Dan Da Dan.glow.caveman.json",
+        "source": "C:\\Users\\thetr\\AppData\\Local\\Temp\\caveman-app-tests\\mock\\decks\\000\\Dan Da Dan.glow.png",
+        "stem": "Dan Da Dan.glow"
+      },
+      {
+        "colour": null,
+        "display": "000 - Dan Da Dan Holo Cellular",
+        "group": "000",
+        "key": "Own_000_-_Dan_Da_Dan_Holo_Cellular",
+        "kind": "deck",
+        "modified": 1792537312718,
+        "notes": [],
+        "preview": "C:\\Users\\thetr\\AppData\\Local\\Temp\\caveman-app-tests\\mock\\decks\\previews\\000 - Dan Da Dan Holo Cellular.png",
+        "settings": {
+          "finish": {
+            "kind": "holo",
+            "mode": "cellular"
+          },
+          "version": 1
+        },
+        "sidecar": false,
+        "sidecarPath": "C:\\Users\\thetr\\AppData\\Local\\Temp\\caveman-app-tests\\mock\\decks\\000\\Dan Da Dan.holo-cellular.caveman.json",
+        "source": "C:\\Users\\thetr\\AppData\\Local\\Temp\\caveman-app-tests\\mock\\decks\\000\\Dan Da Dan.holo-cellular.png",
+        "stem": "Dan Da Dan.holo-cellular"
+      },
+      {
+        "colour": null,
+        "display": "000 - Dan Da Dan Holo Frost",
+        "group": "000",
+        "key": "Own_000_-_Dan_Da_Dan_Holo_Frost",
+        "kind": "deck",
+        "modified": 1792537312665,
+        "notes": [],
+        "preview": "C:\\Users\\thetr\\AppData\\Local\\Temp\\caveman-app-tests\\mock\\decks\\previews\\000 - Dan Da Dan Holo Frost.png",
+        "settings": {
+          "finish": {
+            "kind": "holo",
+            "mode": "frost"
+          },
+          "version": 1
+        },
+        "sidecar": false,
+        "sidecarPath": "C:\\Users\\thetr\\AppData\\Local\\Temp\\caveman-app-tests\\mock\\decks\\000\\Dan Da Dan.holo-frost.caveman.json",
+        "source": "C:\\Users\\thetr\\AppData\\Local\\Temp\\caveman-app-tests\\mock\\decks\\000\\Dan Da Dan.holo-frost.png",
+        "stem": "Dan Da Dan.holo-frost"
+      },
+      {
+        "colour": null,
+        "display": "000 - Dan Da Dan Holo Glitter",
+        "group": "000",
+        "key": "Own_000_-_Dan_Da_Dan_Holo_Glitter",
+        "kind": "deck",
+        "modified": 1792537312762,
+        "notes": [],
+        "preview": "C:\\Users\\thetr\\AppData\\Local\\Temp\\caveman-app-tests\\mock\\decks\\previews\\000 - Dan Da Dan Holo Glitter.png",
+        "settings": {
+          "finish": {
+            "kind": "holo",
+            "mode": "glitter"
+          },
+          "version": 1
+        },
+        "sidecar": false,
+        "sidecarPath": "C:\\Users\\thetr\\AppData\\Local\\Temp\\caveman-app-tests\\mock\\decks\\000\\Dan Da Dan.holo-glitter.caveman.json",
+        "source": "C:\\Users\\thetr\\AppData\\Local\\Temp\\caveman-app-tests\\mock\\decks\\000\\Dan Da Dan.holo-glitter.png",
+        "stem": "Dan Da Dan.holo-glitter"
+      },
+      {
+        "colour": null,
+        "display": "000 - Dan Da Dan Holo Vertical Spot",
+        "group": "000",
+        "key": "Own_000_-_Dan_Da_Dan_Holo_Vertical_Spot",
+        "kind": "deck",
+        "modified": 1792526776725,
+        "notes": [],
+        "preview": "C:\\Users\\thetr\\AppData\\Local\\Temp\\caveman-app-tests\\mock\\decks\\previews\\000 - Dan Da Dan Holo Vertical Spot.png",
+        "settings": {
+          "finish": {
+            "kind": "holo",
+            "mode": "vertical",
+            "spot": true
+          },
+          "version": 1
+        },
+        "sidecar": false,
+        "sidecarPath": "C:\\Users\\thetr\\AppData\\Local\\Temp\\caveman-app-tests\\mock\\decks\\000\\Dan Da Dan.holo-vertical.spot.caveman.json",
+        "source": "C:\\Users\\thetr\\AppData\\Local\\Temp\\caveman-app-tests\\mock\\decks\\000\\Dan Da Dan.holo-vertical.spot.png",
+        "stem": "Dan Da Dan.holo-vertical.spot"
+      },
+      {
+        "colour": null,
+        "display": "000 - Dan Da Dan Holo",
+        "group": "000",
+        "key": "Own_000_-_Dan_Da_Dan_Holo",
+        "kind": "deck",
+        "modified": 1792526776697,
+        "notes": [],
+        "preview": "C:\\Users\\thetr\\AppData\\Local\\Temp\\caveman-app-tests\\mock\\decks\\previews\\000 - Dan Da Dan Holo.png",
+        "settings": {
+          "finish": {
+            "kind": "holo",
+            "mode": "pearl"
+          },
+          "version": 1
+        },
+        "sidecar": false,
+        "sidecarPath": "C:\\Users\\thetr\\AppData\\Local\\Temp\\caveman-app-tests\\mock\\decks\\000\\Dan Da Dan.holo.caveman.json",
+        "source": "C:\\Users\\thetr\\AppData\\Local\\Temp\\caveman-app-tests\\mock\\decks\\000\\Dan Da Dan.holo.png",
+        "stem": "Dan Da Dan.holo"
+      },
+      {
+        "colour": null,
+        "display": "000 - Dan Da Dan Nyan",
+        "group": "000",
+        "key": "Own_000_-_Dan_Da_Dan_Nyan",
+        "kind": "deck",
+        "modified": 1792541044811,
+        "notes": [],
+        "preview": "C:\\Users\\thetr\\AppData\\Local\\Temp\\caveman-app-tests\\mock\\decks\\previews\\000 - Dan Da Dan Nyan.png",
+        "settings": {
+          "board": {
+            "effect": "nyan",
+            "steps": 8.0
+          },
+          "version": 1
+        },
+        "sidecar": false,
+        "sidecarPath": "C:\\Users\\thetr\\AppData\\Local\\Temp\\caveman-app-tests\\mock\\decks\\000\\Dan Da Dan.nyan.caveman.json",
+        "source": "C:\\Users\\thetr\\AppData\\Local\\Temp\\caveman-app-tests\\mock\\decks\\000\\Dan Da Dan.nyan.png",
+        "stem": "Dan Da Dan.nyan"
+      },
+      {
+        "colour": null,
+        "display": "000 - Dan Da Dan Holo Cellular Spot Cycle",
+        "group": "000",
+        "key": "Own_000_-_Dan_Da_Dan_Holo_Cellular_Spot_Cycle",
+        "kind": "deck",
+        "modified": 1792519499936,
+        "notes": [],
+        "preview": "C:\\Users\\thetr\\AppData\\Local\\Temp\\caveman-app-tests\\mock\\decks\\previews\\000 - Dan Da Dan Holo Cellular Spot Cycle.png",
+        "settings": {
+          "finish": {
+            "kind": "holo",
+            "mode": "cellular",
+            "spot": true
+          },
+          "shader": {
+            "effect": "cycle",
+            "glow": 0.0,
+            "speed": 0.4
+          },
+          "version": 1
+        },
+        "sidecar": true,
+        "sidecarPath": "C:\\Users\\thetr\\AppData\\Local\\Temp\\caveman-app-tests\\mock\\decks\\000\\Dan Da Dan.caveman.json",
+        "source": "C:\\Users\\thetr\\AppData\\Local\\Temp\\caveman-app-tests\\mock\\decks\\000\\Dan Da Dan.png",
+        "stem": "Dan Da Dan"
+      },
+      {
+        "colour": null,
+        "display": "Test - Test Pattern",
+        "group": "Test",
+        "key": "Own_Test_-_Test_Pattern",
+        "kind": "deck",
+        "modified": 1792516055755,
+        "notes": [],
+        "preview": "C:\\Users\\thetr\\AppData\\Local\\Temp\\caveman-app-tests\\mock\\decks\\previews\\Test - Test Pattern.png",
+        "settings": {
+          "version": 1
+        },
+        "sidecar": false,
+        "sidecarPath": "C:\\Users\\thetr\\AppData\\Local\\Temp\\caveman-app-tests\\mock\\decks\\Test\\Test Pattern.caveman.json",
+        "source": "C:\\Users\\thetr\\AppData\\Local\\Temp\\caveman-app-tests\\mock\\decks\\Test\\Test Pattern.png",
+        "stem": "Test Pattern"
+      }
+    ],
+    "decksDir": "C:\\Users\\thetr\\AppData\\Local\\Temp\\caveman-app-tests\\mock\\decks",
+    "problems": [],
+    "wheels": [
+      {
+        "colour": "#ff0000",
+        "display": "Test Wheel",
+        "group": "",
+        "key": "Own_Test_Wheel",
+        "kind": "wheel",
+        "modified": 1792539906030,
+        "notes": [],
+        "preview": "C:\\Users\\thetr\\AppData\\Local\\Temp\\caveman-app-tests\\mock\\wheels\\previews\\Test Wheel.png",
+        "settings": null,
+        "sidecar": false,
+        "sidecarPath": "C:\\Users\\thetr\\AppData\\Local\\Temp\\caveman-app-tests\\mock\\wheels\\Test Wheel.ff0000.caveman.json",
+        "source": "C:\\Users\\thetr\\AppData\\Local\\Temp\\caveman-app-tests\\mock\\wheels\\Test Wheel.ff0000.png",
+        "stem": "Test Wheel.ff0000"
+      }
+    ],
+    "wheelsDir": "C:\\Users\\thetr\\AppData\\Local\\Temp\\caveman-app-tests\\mock\\wheels"
+  },
+  "roots": [
+    "C:\\Users\\thetr\\AppData\\Local\\Temp\\caveman-app-tests\\mock",
+    "E:\\Games\\ReSkate\\Caveman Decks"
+  ]
+}

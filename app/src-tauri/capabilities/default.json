@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "The main window: Caveman's own commands, events and the asset protocol for local images",
+  "windows": ["main"],
+  "permissions": ["core:default"]
+}

@@ -1,0 +1,13 @@
+[package]
+name = "caveman-trainer"
+description = "caveman-trainer: injects caveman_fx.dll into skate. and drives it (status, watch, fire, rules, unload)"
+edition.workspace = true
+version.workspace = true
+
+[[bin]]
+name = "caveman-trainer"
+path = "src/main.rs"
+
+[dependencies]
+caveman-fx = { path = "../caveman-fx" }
+serde_json = "1"
