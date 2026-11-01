@@ -33,7 +33,7 @@ Fully automated pull requests (no human in the loop) are not accepted yet: open 
 
 - Game data of any kind, however small: textures, meshes, bundles, statistics computed from them, previews rendered from them. Caveman builds everything from the player's own install at run time.
 - Anything that bypasses ReSkate's own mod loading or touches the game's files in place.
-- Dependencies on Visual Studio: the maintainer builds with the GNU toolchain and the small MinGW kit in `app/toolchain`; CI builds with MSVC. Both have to keep working.
+- Anything that only builds on one Windows toolchain: MSVC is what CI and the releases use, and the GNU toolchain (with the small MinGW kit in `app/toolchain`) has to keep working too.
 
 ## Releases
 

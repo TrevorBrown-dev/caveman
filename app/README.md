@@ -13,14 +13,14 @@ Caveman's desktop app, since 0.2.0 (2026-10-30) a launcher in the shape of ReSka
 
 ## Running it
 
-Once per machine: `pnpm install` in `app/` (about 127 MB of `node_modules`), and, on the GNU toolchain, the MinGW tools (`%LOCALAPPDATA%\Caveman\toolchain`, or run `toolchain\fetch-toolchain.ps1`; the MSVC toolchain, which CI uses, needs nothing extra). Every app build on the GNU toolchain needs those tools on PATH:
+Once per machine: `pnpm install` in `app/` (about 127 MB of `node_modules`). The workspace's `rust-toolchain.toml` picks the host's stable toolchain, MSVC on most machines (Visual Studio Build Tools for the linker), which needs nothing else. On the GNU toolchain the app also needs the MinGW tools (`%LOCALAPPDATA%\Caveman\toolchain`, or run `toolchain\fetch-toolchain.ps1`) on PATH for every build:
 
 ```
 $env:PATH = "$env:LOCALAPPDATA\Caveman\toolchain\mingw64\bin;$env:PATH"
 ```
 
 - **The app, for development:** `pnpm tauri dev` in `app/` (Vite on port 5173 plus a debug build of the back end, reloading on edits).
-- **The app, standalone:** `pnpm tauri build --no-bundle` builds `target\release\caveman-app.exe` (24 MB) with the front end inside it; keep `WebView2Loader.dll` beside it (GNU builds load WebView2 through that DLL). Use the Tauri CLI rather than plain `cargo build --release`: without the CLI's `custom-protocol` feature the exe looks for the dev server instead of its own pages. There is no installer yet (`bundle.active` is false). The exe cannot be rebuilt while it runs (the linker cannot overwrite it).
+- **The app, standalone:** `pnpm tauri build --no-bundle` builds `target\release\caveman-app.exe` with the front end inside it. A GNU build also needs `WebView2Loader.dll` beside it (it loads WebView2 through that DLL; MSVC builds do not). Use the Tauri CLI rather than plain `cargo build --release`: without the CLI's `custom-protocol` feature the exe looks for the dev server instead of its own pages. There is no installer yet (`bundle.active` is false). The exe cannot be rebuilt while it runs (the linker cannot overwrite it).
 - **The UI in a browser, no back end:** `pnpm dev:mock`, then open `http://localhost:5173/`. It serves `mock/library.json` and the images it names; the plugins' controls run nothing there. URL options: `?page=plugins|studio|console` opens a page.
 - **Checks:** `pnpm check` (svelte-check and TypeScript, 0 errors and 0 warnings), `pnpm build` (the front end into `dist/`).
 - **Back-end tests:** `cargo test --release -p caveman-app --lib` (the Live back end's unit tests, the config's). `cargo test --release -p caveman-app -- --ignored` from `Caveman/` (tools on PATH) builds against the game at `E:\Games\ReSkate` into a scratch folder (`CAVEMAN_APP_SCRATCH`); nothing is written to the game folder. `dump_mock_fixture` rewrites `mock/library.json`.

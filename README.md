@@ -16,7 +16,7 @@ Your own decks, wheels and grip tape in *skate.*, through [ReSkate](https://resk
 
 ## Install
 
-Download the zip from [trevorbrown.dev/gh/caveman](https://trevorbrown.dev/gh/caveman) and unzip it into your ReSkate folder (the one with `ReSkateLauncher.exe`). You get `Caveman.exe` beside it and a `Caveman` folder with the app (`caveman-app.exe`), the command line, the trainer and the FX DLL. Windows asks once about an unsigned program: *More info*, *Run anyway*. Requires Windows 10 or 11 and *skate.* on PC with ReSkate 2.1.3.
+Download `Caveman-win64.zip` from [trevorbrown.dev/gh/caveman](https://trevorbrown.dev/gh/caveman) and unzip it into your ReSkate folder (the one with `ReSkateLauncher.exe`). You get `Caveman.exe` beside the launcher, a `Caveman` folder with the app (`caveman-app.exe`), the command line, the trainer and the FX DLL, and a `README.txt` that says the same. Windows asks once about an unsigned program: *More info*, *Run anyway*. Requires Windows 10 or 11 and *skate.* on PC with ReSkate 2.1.3. There is no installer on purpose: what goes where is plain to see, and nothing runs that you did not start.
 
 Everything Caveman writes stays in your ReSkate folder (`Mods\Caveman-*`, the `Caveman` folder) and in `%APPDATA%\dev.caveman.app`. To remove it, delete those.
 
@@ -28,14 +28,14 @@ The FX DLL hooks the game's renderer to put your picture on the ridden board's o
 
 ## Building from source
 
-Windows, Rust stable (`rust-toolchain.toml` picks the components), and for the app pnpm 11 with Node 24.
+Windows, Rust stable with the MSVC toolchain (`rust-toolchain.toml` picks the host's stable with rustfmt and clippy; Visual Studio Build Tools provide the linker), and for the app pnpm 11 with Node 24.
 
 ```
 cargo build --release                      # caveman.exe, caveman-trainer.exe, caveman_fx.dll, caveman-launcher.exe (= Caveman.exe)
 cd app && pnpm install && pnpm tauri build --no-bundle    # caveman-app.exe, with the front end inside it
 ```
 
-On the GNU toolchain (`x86_64-pc-windows-gnu`, what the maintainer uses) the app needs a few MinGW tools on PATH; `app/toolchain/fetch-toolchain.ps1` fetches them (about 9 MB). On MSVC nothing extra is needed. `app/README.md` has the development loop (`pnpm tauri dev`, the mock, the DevTools port).
+The GNU toolchain (`x86_64-pc-windows-gnu`) works too, with a few MinGW tools on PATH for the app that `app/toolchain/fetch-toolchain.ps1` fetches (about 9 MB); point `rust-toolchain.toml` at it or use a `rustup override`. `app/README.md` has the development loop (`pnpm tauri dev`, the mock, the DevTools port).
 
 Checks, the same ones CI runs:
 
