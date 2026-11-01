@@ -8,7 +8,7 @@ repository.workspace = true
 
 [dependencies]
 # Keep this list short: Windows APIs (Oodle, DXC COM, process checks) are called directly, as launcher/ does.
-png = "0.17"          # PNG read/write (deck art in, previews out)
+png = "0.18"          # PNG read/write (deck art in, previews out)
 sha1_smol = "1"       # bundle manifest SHA-1s
 serde = { version = "1", features = ["derive"] }   # the per-deck settings files (settings.rs)
 serde_json = "1"
