@@ -10,6 +10,10 @@ updates:
       cargo:
         patterns:
           - "*"
+    ignore:
+      # png 0.18 changed the decoder's API (its reader must seek); taken by hand when the readers are adapted
+      - dependency-name: "png"
+        update-types: ["version-update:semver-minor"]
     commit-message:
       prefix: "deps(cargo)"
 
