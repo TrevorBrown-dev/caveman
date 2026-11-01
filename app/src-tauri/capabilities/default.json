@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "The main window and the board cam window: Caveman's own commands, events and the asset protocol for local images; the board cam window is dragged by its page and closes itself",
-  "windows": ["main", "boardcam"],
+  "description": "The main window and the widget windows (widget-*: the board cam, the speed meter): Caveman's own commands, events and the asset protocol for local images; a widget window is dragged by its page and closes itself",
+  "windows": ["main", "widget-*"],
   "permissions": ["core:default", "core:window:allow-start-dragging", "core:window:allow-close", "core:window:allow-set-size", "core:window:allow-set-position"]
 }

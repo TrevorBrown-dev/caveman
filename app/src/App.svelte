@@ -11,6 +11,7 @@
   import SettingsDialog from './components/SettingsDialog.svelte';
   import * as api from './lib/api';
   import * as live from './lib/live';
+  import * as widgets from './lib/widgets';
   import { ENTRIES } from './lib/changelog';
   import { pluginsOf, type Config, type LauncherStatus, type Library as Lib, type PluginsConfig } from './lib/types';
 
@@ -25,6 +26,8 @@
   let playing = $state(false);
   let showSettings = $state(false);
   let showChangelogs = $state(false);
+  /** Which widget windows are open, by kind (the back end says, `widget-state`). */
+  let openWidgets = $state<Record<string, boolean>>({});
   let toast: { text: string; kind: 'info' | 'error' } | null = $state(null);
   let toastTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -66,9 +69,9 @@
   function savePlugins(p: PluginsConfig): void {
     if (!config) return;
     const before = plugins;
-    void saveConfig({ ...config, plugins: p as unknown as Record<string, unknown> });
+    void saveConfig({ ...config, plugins: widgets.forSave(p) as unknown as Record<string, unknown> });
     // a plugin's checkbox is its switch: ticked while the game runs with the DLL in, it starts now; unticked, it stops
-    for (const id of ['bars', 'obs', 'boardcam'] as const) {
+    for (const id of ['bars', 'obs'] as const) {
       if (p[id].autostart === before[id].autostart) continue;
       if (p[id].autostart) {
         if (injected === true) startPlugin(id, p).catch((e) => say(String(e), 'error'));
@@ -76,12 +79,17 @@
         stopPlugin(id).catch((e) => say(String(e), 'error'));
       }
     }
+    // a widget's checkbox: ticked, its window opens now (it waits for the game by itself); unticked, it closes
+    for (const w of widgets.WIDGETS) {
+      const now = p.widgets[w.kind]?.autostart ?? false;
+      if (now === (before.widgets[w.kind]?.autostart ?? false)) continue;
+      if (now) widgets.open(w.kind, widgets.widgetConfig(p, w.kind).options).catch((e) => say(`${w.name}: ${String(e)}`, 'error'));
+      else widgets.close(w.kind).catch((e) => say(`${w.name}: ${String(e)}`, 'error'));
+    }
   }
 
-  async function stopPlugin(id: 'bars' | 'obs' | 'boardcam'): Promise<void> {
-    if (id === 'boardcam') {
-      await live.boardcamClose();
-    } else if (id === 'obs') {
+  async function stopPlugin(id: 'bars' | 'obs'): Promise<void> {
+    if (id === 'obs') {
       if (await live.videoRunning()) await live.videoStop();
     } else if (injected === true) {
       await live.live(['bars', 'off']);
@@ -89,7 +97,7 @@
   }
 
   /** Starts one plugin as its "start with the game" switch would. Returns what was started, or null. */
-  async function startPlugin(id: 'bars' | 'obs' | 'boardcam', p: PluginsConfig): Promise<string | null> {
+  async function startPlugin(id: 'bars' | 'obs', p: PluginsConfig): Promise<string | null> {
     if (id === 'bars') {
       await live.live(['bars', 'on']);
       return 'the soundbars';
@@ -101,9 +109,29 @@
       await live.videoStart([source, '--rotate', p.obs.rotate, '--fit', p.obs.fit]);
       return 'the OBS link';
     }
-    // (the window reads the picture on the board itself: `boardArt`)
-    await live.boardcamOpen({ ...p.boardcam, art: null, rate: 60 });
-    return 'the board cam window';
+    return null;
+  }
+
+  /** The widgets marked to open with the game, as soon as a game runs (they need no DLL: the pose is read from outside). */
+  async function autostartWidgets(): Promise<void> {
+    let open: string[] = [];
+    try {
+      open = await widgets.list();
+    } catch {
+      open = [];
+    }
+    const started: string[] = [];
+    for (const w of widgets.WIDGETS) {
+      const c = widgets.widgetConfig(plugins, w.kind);
+      if (!c.autostart || open.includes(w.kind)) continue;
+      try {
+        await widgets.open(w.kind, c.options);
+        started.push(w.name);
+      } catch (e) {
+        say(`${w.name}: ${String(e)}`, 'error');
+      }
+    }
+    if (started.length > 0) say(`Opened ${started.join(', ')}`);
   }
 
   // ---- the game's state, and what follows from it
@@ -131,6 +159,7 @@
       wasRunning = false;
       return;
     }
+    if (!wasRunning) void autostartWidgets();
     wasRunning = true;
     let now: boolean | null = null;
     let brief: live.LiveStatus['brief'] = undefined;
@@ -176,7 +205,7 @@
     const p = plugins;
     const started: string[] = [];
     try {
-      for (const id of ['bars', 'obs', 'boardcam'] as const) {
+      for (const id of ['bars', 'obs'] as const) {
         if (!p[id].autostart) continue;
         const what = await startPlugin(id, p);
         if (what) started.push(what);
@@ -220,7 +249,28 @@
       await poll();
     })();
     const timer = setInterval(poll, 4000);
-    return () => clearInterval(timer);
+    // the widget windows: which are open, and the options they change themselves (a view dragged in the board cam),
+    // saved into their settings without a round trip back to the window
+    const offState = widgets.onState((kind, open) => (openWidgets = { ...openWidgets, [kind]: open }));
+    widgets
+      .list()
+      .then((kinds) => (openWidgets = Object.fromEntries(kinds.map((k) => [k, true]))))
+      .catch(() => {});
+    const offReport = widgets.onReport((kind, patch) => {
+      if (!config) return;
+      const p = plugins;
+      const c = widgets.widgetConfig(p, kind);
+      const next = { ...p, widgets: { ...p.widgets, [kind]: { ...c, options: { ...c.options, ...patch } } } };
+      api
+        .saveConfig({ ...config, plugins: widgets.forSave(next) as unknown as Record<string, unknown> })
+        .then((saved) => (config = saved))
+        .catch(() => {});
+    });
+    return () => {
+      clearInterval(timer);
+      void offState.then((u) => u());
+      void offReport.then((u) => u());
+    };
   });
 </script>
 
@@ -242,7 +292,7 @@
       </header>
       <div class="page-body">
         {#if view === 'plugins' && config}
-          <Plugins {config} {plugins} {library} {gameRunning} {injected} onplugins={savePlugins} onconfig={saveConfig} onsay={say} onattach={() => api.attachDll().then(() => say('Putting the FX DLL in'), (e) => say(String(e), 'error'))} />
+          <Plugins {config} {plugins} {library} {gameRunning} {injected} {openWidgets} onplugins={savePlugins} onconfig={saveConfig} onsay={say} onattach={() => api.attachDll().then(() => say('Putting the FX DLL in'), (e) => say(String(e), 'error'))} />
         {:else if view === 'studio' && config}
           <Studio {config} {library} {gameRunning} onrefresh={refresh} onsay={say} onbuilt={readStatus} />
         {:else if view === 'console'}

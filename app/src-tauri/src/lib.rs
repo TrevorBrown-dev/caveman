@@ -9,3 +9,4 @@ pub mod live;
 pub mod loadout;
 pub mod ring;
 pub mod sqlite;
+pub mod widgets;

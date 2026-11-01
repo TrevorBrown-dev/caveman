@@ -1,10 +1,14 @@
 <script lang="ts">
-  // The Plugins page: the exotic features that need the FX DLL in the running game, one card each (the OBS link, the
-  // board cam window, the soundbars), a switch per plugin to start it with the game, and the DLL's own settings (put
-  // in at launch, the staging ring). A card's settings are the Live panel's sections for it (Live.svelte, `show`).
+  // The Plugins page: the features that need the FX DLL in the running game (the OBS link, the soundbars) and the
+  // widgets, the see-through windows OBS captures one by one (the board cam, the speed meter; lib/widgets.ts is the
+  // registry), one card each with a switch to start it with the game, and the DLL's own settings (put in at launch,
+  // the staging ring). A plugin card's settings are the Live panel's sections for it (Live.svelte, `show`); a widget
+  // card's are its own pane (Widgets.svelte).
   import type { Config, Library, LibraryItem, PluginsConfig } from '../lib/types';
+  import { WIDGETS, widgetConfig } from '../lib/widgets';
   import Library_ from './Library.svelte';
   import Live from './Live.svelte';
+  import Widgets from './Widgets.svelte';
 
   interface Props {
     config: Config;
@@ -12,20 +16,23 @@
     library: Library | null;
     gameRunning: boolean;
     injected: boolean | null;
+    /** Which widget windows are open, by kind. */
+    openWidgets: Record<string, boolean>;
     onplugins: (p: PluginsConfig) => void;
     onconfig: (c: Config) => void;
     onsay: (text: string, kind?: 'info' | 'error') => void;
     onattach: () => void;
   }
-  let { config, plugins, library, gameRunning, injected, onplugins, onconfig, onsay, onattach }: Props = $props();
+  let { config, plugins, library, gameRunning, injected, openWidgets, onplugins, onconfig, onsay, onattach }: Props = $props();
 
-  type Which = 'obs' | 'boardcam' | 'bars';
+  type Which = 'obs' | 'bars';
   const CARDS: { id: Which; title: string; what: string }[] = [
     { id: 'obs', title: 'OBS link', what: "OBS's virtual camera, a video or any picture on the ridden board, live" },
-    { id: 'boardcam', title: 'Board cam', what: 'A see-through window with the board turning as it does under you, for OBS to capture' },
     { id: 'bars', title: 'Soundbars', what: "Equaliser bars on the deck, moving to the PC's sound" },
   ];
-  let selected = $state<Which>('obs');
+  /** A plugin's id, or `widget:<kind>`. */
+  let selected = $state<string>('obs');
+  const selectedWidget = $derived(selected.startsWith('widget:') ? selected.slice('widget:'.length) : null);
   let deck = $state<LibraryItem | null>(null);
   let libraryTab = $state<'deck' | 'wheel'>('deck');
   let boardArt = $state<string | null>(null);
@@ -41,9 +48,12 @@
   function autostart(id: Which, on: boolean): void {
     onplugins({ ...plugins, [id]: { ...plugins[id], autostart: on } });
   }
+  function widgetAutostart(kind: string, on: boolean): void {
+    onplugins({ ...plugins, widgets: { ...plugins.widgets, [kind]: { ...widgetConfig(plugins, kind), autostart: on } } });
+  }
 </script>
 
-<div class="plugins">
+<div class="plugins" class:widget={selectedWidget !== null}>
   <aside class="cards">
     <section class="dll">
       <h3>FX DLL</h3>
@@ -61,7 +71,7 @@
           {#each RINGS as r (r.mb)}<option value={r.mb}>{r.label}</option>{/each}
         </select>
       </label>
-      <p class="faint small">The ring stands in for the game's staging buffers at a skater build (it holds its size in memory the whole game). The plugins below need the DLL; with the switch on, Caveman puts it in whichever way the game was started while Caveman is open. Click a card for its controls; its checkbox switches it on, now and at every game start.</p>
+      <p class="faint small">The ring stands in for the game's staging buffers at a skater build (it holds its size in memory the whole game). The two plugins below need the DLL; with the switch on, Caveman puts it in whichever way the game was started while Caveman is open. Click a card for its controls; its checkbox switches it on, now and at every game start.</p>
       {#if gameRunning && !injected}
         <button class="small" onclick={onattach}>Put it in now</button>
       {/if}
@@ -75,13 +85,27 @@
         <input class="auto" type="checkbox" checked={plugins[c.id].autostart} onchange={(e) => autostart(c.id, e.currentTarget.checked)} title="On: starts with the game (and now, when the FX DLL is in); off: stops it" aria-label={`${c.title} on`} />
       </div>
     {/each}
+    <h3 class="group" title="See-through windows over the game, read from outside it (no DLL needed); OBS captures each as a window">Widgets</h3>
+    {#each WIDGETS as w (w.kind)}
+      <div class="card" class:on={selected === `widget:${w.kind}`}>
+        <button class="pick" onclick={() => (selected = `widget:${w.kind}`)}>
+          <span class="title">{w.name} <span class="open" class:on={openWidgets[w.kind] === true} title={openWidgets[w.kind] ? 'The window is open' : 'The window is closed'}></span></span>
+          <span class="what">{w.blurb}</span>
+        </button>
+        <input class="auto" type="checkbox" checked={widgetConfig(plugins, w.kind).autostart} onchange={(e) => widgetAutostart(w.kind, e.currentTarget.checked)} title="On: opens with the game (and now); off: closes it" aria-label={`${w.name} on`} />
+      </div>
+    {/each}
     <p class="faint small parked">Particle effects are parked for now: the effect test decks are out of the build until their tools are ready.</p>
   </aside>
 
-  {#if selected === 'obs'}
-    <Library_ {library} selected={deck?.source ?? null} onselect={(i) => (deck = i)} bind:tab={libraryTab} live={true} {boardArt} />
+  {#if selectedWidget !== null}
+    <Widgets kind={selectedWidget} {plugins} open={openWidgets[selectedWidget] === true} {onplugins} {onsay} />
+  {:else}
+    {#if selected === 'obs'}
+      <Library_ {library} selected={deck?.source ?? null} onselect={(i) => (deck = i)} bind:tab={libraryTab} live={true} {boardArt} />
+    {/if}
+    <Live show={selected as Which} {deck} {plugins} {onplugins} {onsay} {library} onboardart={(a) => (boardArt = a)} />
   {/if}
-  <Live show={selected} {deck} {plugins} {onplugins} {onsay} {library} onboardart={(a) => (boardArt = a)} />
 </div>
 
 <style>
@@ -90,6 +114,9 @@
     grid-template-columns: 300px auto minmax(360px, 1fr);
     height: 100%;
     min-height: 0;
+  }
+  .plugins.widget {
+    grid-template-columns: 300px minmax(360px, 1fr);
   }
   .cards {
     display: flex;
@@ -113,6 +140,9 @@
     text-transform: uppercase;
     letter-spacing: 0.04em;
     color: var(--text-dim);
+  }
+  h3.group {
+    margin: 8px 0 0;
   }
   .state {
     display: flex;
@@ -179,10 +209,23 @@
     border-color: transparent;
   }
   .title {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
     font-size: 17px;
     font-weight: 800;
     letter-spacing: 0.02em;
     text-transform: uppercase;
+  }
+  .open {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--text-faint);
+  }
+  .open.on {
+    background: var(--good);
+    box-shadow: 0 0 6px var(--good);
   }
   .auto {
     position: absolute;

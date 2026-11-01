@@ -49,10 +49,19 @@ export interface Library {
 }
 
 /** The plugins' settings, the front end's own (kept in the config's `plugins` object). */
+/** A widget's saved settings (lib/widgets.ts): open it with the game, its window's last place (the back end keeps it;
+ *  null resets it), and its options. */
+export interface WidgetConfig {
+  autostart: boolean;
+  window?: { x: number; y: number; w: number; h: number } | null;
+  options: Record<string, string | number | boolean | null>;
+}
+
 export interface PluginsConfig {
   obs: { autostart: boolean; source: 'obs' | 'file'; file: string; rotate: 'cw' | 'ccw' | 'none'; fit: 'cover' | 'contain' };
-  boardcam: { autostart: boolean; size: number; elevation: number; azimuth: number; zoom: number; turn: 'camera' | 'world'; mirror: boolean; nose: boolean; art: boolean };
   bars: { autostart: boolean };
+  /** The widgets by kind (the board cam, the speed meter, ...). */
+  widgets: Record<string, WidgetConfig>;
   /** The Live panel's: the picture last put on the board, as the trainer command that put it there, so the app
    *  puts it back by itself in the next game session (null: nothing, or plain white chosen). */
   live: { lastDeck: { label: string; args: string[] } | null };
@@ -60,18 +69,34 @@ export interface PluginsConfig {
 
 export const DEFAULT_PLUGINS: PluginsConfig = {
   obs: { autostart: false, source: 'obs', file: '', rotate: 'none', fit: 'cover' },
-  boardcam: { autostart: false, size: 360, elevation: -30, azimuth: 20, zoom: 1, turn: 'camera', mirror: false, nose: false, art: true },
   bars: { autostart: false },
+  widgets: {},
   live: { lastDeck: null },
 };
 
+/** The widgets' settings, with the board cam's from before the widgets (`boardcam` at the top, until 2026-11-01)
+ *  carried over once. */
+function widgetsOf(p: Record<string, unknown>): Record<string, WidgetConfig> {
+  const widgets = { ...((p.widgets as Record<string, WidgetConfig> | undefined) ?? {}) };
+  const old = p.boardcam as Record<string, unknown> | undefined;
+  if (old && !widgets.boardcam) {
+    const options: WidgetConfig['options'] = {};
+    for (const key of ['elevation', 'azimuth', 'zoom', 'turn', 'mirror', 'nose']) {
+      const v = old[key];
+      if (typeof v === 'number' || typeof v === 'string' || typeof v === 'boolean') options[key] = v;
+    }
+    widgets.boardcam = { autostart: old.autostart === true, options };
+  }
+  return widgets;
+}
+
 /** The plugins' settings with the defaults under whatever the config holds. */
 export function pluginsOf(config: Config | null): PluginsConfig {
-  const p = (config?.plugins ?? {}) as Partial<Record<keyof PluginsConfig, Record<string, unknown>>>;
+  const p = (config?.plugins ?? {}) as Record<string, Record<string, unknown>>;
   return {
     obs: { ...DEFAULT_PLUGINS.obs, ...(p.obs ?? {}) } as PluginsConfig['obs'],
-    boardcam: { ...DEFAULT_PLUGINS.boardcam, ...(p.boardcam ?? {}) } as PluginsConfig['boardcam'],
     bars: { ...DEFAULT_PLUGINS.bars, ...(p.bars ?? {}) } as PluginsConfig['bars'],
+    widgets: widgetsOf(p),
     live: { ...DEFAULT_PLUGINS.live, ...(p.live ?? {}) } as PluginsConfig['live'],
   };
 }

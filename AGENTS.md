@@ -15,7 +15,7 @@ Caveman turns a folder of PNGs into mods for **ReSkate**, the fan-made mod platf
 | `crates/caveman-fx` | `caveman_fx.dll`: everything that runs inside the game (hooks, the board texture writer, the video ring, the overlay, the pose reader's shared parts, the memory guard and staging ring) |
 | `crates/caveman-trainer` | `caveman-trainer`: injects and drives the DLL over a named pipe, reads the game from outside (`pose`, `probe`), and the diagnostics |
 | `launcher/` | `Caveman.exe`: builds what changed, starts ReSkate's launcher, attaches the DLL when asked |
-| `app/` | The desktop app; `app/README.md` describes it. `app/src-tauri` is the back end crate (a workspace member, not a default member: it needs the Tauri toolchain) |
+| `app/` | The desktop app; `app/README.md` describes it. `app/src-tauri` is the back end crate (a workspace member, not a default member: it needs the Tauri toolchain). `app/src/lib/widgets.ts` and `app/src/components/widgets/` are the widget system (the overlay windows: board cam, speed meter), `docs/widgets.md` explains it and how to add one |
 | `docs/` | Design notes and working records (`deck-format.md` is the format write-up; `board-cam.md`, `grips.md` and the rest are the stories of how each part was worked out); `docs/index.html` is the download page served by GitHub Pages |
 | `assets/` | Templates and outlines Caveman ships (ours, not the game's) |
 | `tools/re`, `caveman.py`, `prototypes/` | The frozen Python research toolkit from before the Rust port (2026-10-21). Kept for the record; nothing builds from it and nothing new goes into it |

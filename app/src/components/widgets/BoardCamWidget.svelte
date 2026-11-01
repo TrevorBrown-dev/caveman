@@ -1,42 +1,58 @@
 <script lang="ts">
-  // The board cam window: a see-through, frameless, always-on-top page (`?view=boardcam`, opened by the Live panel)
-  // that draws the game's own skateboard posed as the board under the skater is this instant. The model is the
-  // game's (the stock deck, trucks and wheels on the board rig, with their textures, built from the install by the
-  // back end: `boardModel`), and the pose comes from outside the game (`caveman-trainer pose --bones`, read-only,
-  // relayed by the back end as `board-pose` events): the board's turn from its entity, and the trucks' steering
-  // and the wheels' spin from the rig's bones. The picture on the board (the DLL's label, resolved by the back end:
-  // `boardArt`) and the OBS link's video frames (the DLL's ring, `boardFrame`) are read by this page itself, never
-  // pushed to it. Nothing is drawn in the game itself; OBS captures this window ("Caveman board cam") and composes
-  // it over the game.
+  // The board cam widget: the game's own skateboard posed as the board under the skater is this instant, in a
+  // see-through window (WidgetFrame.svelte around it). The model is the game's (the stock deck, trucks and wheels on
+  // the board rig, with their textures, built from the install by the back end: `boardModel`), and the pose comes from
+  // outside the game (`caveman-trainer pose --bones`, read-only, relayed as `board-pose` events through
+  // lib/telemetry.svelte.ts): the board's turn from its entity, and the trucks' steering and the wheels' spin from the
+  // rig's bones. The picture on the board (the DLL's label, resolved by the back end: `boardArt`) and the OBS link's
+  // video frames (the DLL's ring, `boardFrame`) are read by this page itself, never pushed to it. Nothing is drawn in
+  // the game itself; OBS captures this window ("Caveman board cam") and composes it over the game.
   //
-  // Options in the query (lib/live.ts `boardcamQuery`): elevation and azimuth of the viewpoint (degrees), zoom, turn
-  // (camera: as the game camera sees the board, so a flip looks as on screen; world: in the world's frame), mirror
-  // (left and right swapped), nose (-1: the nose the other way), art (the deck art's PNG), rate (reads a second).
-  import { onMount } from 'svelte';
+  // Options (lib/widgets.ts): elevation and azimuth of the viewpoint (degrees), zoom, turn (camera: as the game camera
+  // sees the board, so a flip looks as on screen; world: in the world's frame), mirror (left and right swapped), nose
+  // (the nose the other way), art (a picture for the deck while the game is not running), rate (reads a second).
+  import { onMount, untrack } from 'svelte';
   import * as THREE from 'three';
   import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
   import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
-  import { getCurrentWindow } from '@tauri-apps/api/window';
-  import * as maps from '../lib/preview/maps';
-  import { boardArt, boardFrame, boardModel, gameRunning, imageBitmap, isMock, readBytes } from '../lib/api';
-  import * as live from '../lib/live';
-  import type { PoseFrame } from '../lib/live';
+  import * as maps from '../../lib/preview/maps';
+  import { boardArt, boardFrame, boardModel, imageBitmap, readBytes } from '../../lib/api';
+  import * as live from '../../lib/live';
+  import type { PoseFrame } from '../../lib/live';
+  import { onFrame, start, stop, telemetry } from '../../lib/telemetry.svelte';
+  import { report, type WidgetProps } from '../../lib/widgets';
 
-  const params = new URLSearchParams(window.location.search);
+  let { options, onstatus }: WidgetProps = $props();
+
   const num = (key: string, fallback: number): number => {
-    const v = Number(params.get(key));
-    return Number.isFinite(v) && params.has(key) ? v : fallback;
+    const v = options[key];
+    return typeof v === 'number' && Number.isFinite(v) ? v : fallback;
   };
-  // the view: from the query, then changed by a drag (elevation and azimuth) or the wheel (zoom) in the window; zoom 1
-  // fits the whole board whichever way it turns (see `fitDistance` below)
-  let elevation = num('elevation', -30);
-  let azimuth = num('azimuth', 20);
-  let zoom = Math.min(Math.max(num('zoom', 1), 0.3), 3);
-  const turn = params.get('turn') === 'world' ? 'world' : 'camera';
-  const mirror = params.get('mirror') === '1';
-  const nose = num('nose', 1) < 0 ? -1 : 1;
-  const art = params.get('art');
+  // the view: from the options, then changed by a drag (elevation and azimuth) or the wheel (zoom) in the window,
+  // which goes back to the app's settings (`report`); the app's own sliders come in through the options. Zoom 1 fits
+  // the whole board whichever way it turns (see `fitDistance` below).
+  let elevation = $state(num('elevation', -30));
+  let azimuth = $state(num('azimuth', 20));
+  let zoom = $state(Math.min(Math.max(num('zoom', 1), 0.3), 3));
+  const turn = $derived(options.turn === 'world' ? 'world' : 'camera');
+  const mirror = $derived(options.mirror === true);
+  const nose = $derived(options.nose === true ? -1 : 1);
+  const artOption = $derived(typeof options.art === 'string' && options.art !== '' ? options.art : null);
   const rate = Math.min(Math.max(num('rate', 60), 1), 240);
+  $effect(() => {
+    // the sliders in the app moved: follow them (a drag here changes the same values; only the options' change is
+    // tracked, so the window's own changes do not snap back)
+    const e = num('elevation', -30);
+    const a = num('azimuth', 20);
+    const z = Math.min(Math.max(num('zoom', 1), 0.3), 3);
+    const [le, la, lz] = untrack(() => [elevation, azimuth, zoom]);
+    if (Math.abs(e - le) > 0.5 || Math.abs(a - la) > 0.5 || Math.abs(z - lz) > 0.005) {
+      elevation = e;
+      azimuth = a;
+      zoom = z;
+      placeCamera?.();
+    }
+  });
 
   /** The rig's bones in the pose's order (caveman_core::boardmodel::LANES); the model's nodes carry these names. */
   const LANES = ['Reference', 'AITrajectory', 'Skateboard_Root', 'Deck', 'Truck_Back', 'eff_truckBack', 'Right_WheelBack', 'Left_WheelBack', 'Truck_Front', 'eff_truckFront', 'Right_WheelFront', 'Left_WheelFront', 'Trajectory', 'Connect', 'Connect2', 'Ground'];
@@ -46,27 +62,22 @@
   const POSED_LANES = [3, 4, 5, 6, 7, 8, 9, 10, 11];
 
   let host: HTMLDivElement | undefined = $state();
-  let status = $state('waiting for the game');
+  let modelStatus = $state<string | null>('building the board from the game');
   let hasPose = $state(false);
-  let hasModel = $state(false);
-  let hint = $state(true);
-  /** The right-click menu's place while it is open. */
-  let menu = $state<{ x: number; y: number } | null>(null);
-  /** The window's bounds shown (a frame and a tint), for placing it on the screen; off for the capture. */
-  let bounds = $state(false);
+  $effect(() => {
+    onstatus(modelStatus ?? (telemetry.live && hasPose ? null : telemetry.status));
+  });
   /** Called by the scene once it exists: put the camera where the view says. */
   let placeCamera: (() => void) | null = null;
   let viewTimer: ReturnType<typeof setTimeout> | null = null;
   function viewChanged(): void {
     placeCamera?.();
     if (viewTimer) clearTimeout(viewTimer);
-    viewTimer = setTimeout(() => void live.sendBoardcamView({ elevation, azimuth, zoom }), 150);
+    viewTimer = setTimeout(() => void report('boardcam', { elevation: Math.round(elevation), azimuth: Math.round(azimuth), zoom: Math.round(zoom * 100) / 100 }), 150);
   }
   let drag: { x: number; y: number; el: number; az: number } | null = null;
   function onPointerDown(e: PointerEvent): void {
-    menu = null;
     if (e.button !== 0) return;
-    hint = false;
     drag = { x: e.clientX, y: e.clientY, el: elevation, az: azimuth };
     (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
   }
@@ -83,15 +94,6 @@
     e.preventDefault();
     zoom = Math.max(0.3, Math.min(3, zoom * Math.pow(1.1, -e.deltaY / 100)));
     viewChanged();
-  }
-  function onContextMenu(e: MouseEvent): void {
-    e.preventDefault();
-    hint = false;
-    menu = { x: Math.max(0, Math.min(e.clientX, window.innerWidth - 190)), y: Math.max(0, Math.min(e.clientY, window.innerHeight - 76)) };
-  }
-  function closeWindow(): void {
-    if (isMock) window.close();
-    else void getCurrentWindow().close();
   }
 
   type V = [number, number, number];
@@ -241,7 +243,7 @@ vec3 cavemanHash(vec2 p) {
     };
     // the deck art: the picture on the board in the game, read from the back end by this window itself (`boardArt`:
     // the DLL's label resolved to the fitted PNG; nothing is pushed here, so a window opened late cannot miss it),
-    // or the query's picture while the game is not running with the DLL in. The fitted art is the deck's graphic
+    // or the options' picture while the game is not running with the DLL in. The fitted art is the deck's graphic
     // texture (512 x 2048), so it goes on the graphic layer exactly as the game's: by the mesh's second UV set, the
     // image's first row at v = 0 (no flip, as glTF).
     const setArt = (path: string | null): void => {
@@ -269,7 +271,7 @@ vec3 cavemanHash(vec2 p) {
           applyArt();
         })
         .catch(() => {
-          status = 'the deck art could not be read';
+          modelStatus = 'the deck art could not be read';
         });
     };
 
@@ -290,11 +292,9 @@ vec3 cavemanHash(vec2 p) {
     };
     place();
     placeCamera = place;
-    const hintTimer = setTimeout(() => (hint = false), 5000);
 
     // the model: built by the back end from the game for the parts the profile says are equipped; asked for again
     // now and then, and loaded anew when its path changes (another deck, grip, trucks or wheels equipped)
-    status = 'building the board from the game';
     const anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
     let disposed = false;
     let modelPath: string | null = null;
@@ -364,19 +364,18 @@ vec3 cavemanHash(vec2 p) {
         const sphere = new THREE.Box3().setFromObject(board).getBoundingSphere(new THREE.Sphere());
         radius = Math.max(sphere.radius + sphere.center.length(), 0.1);
         place();
-        hasModel = true;
+        modelStatus = null;
         hasPose = false;
-        if (!hasPose) status = 'waiting for the game';
         applyArt();
       } catch (err) {
-        status = `the board model: ${String(err)}`;
+        modelStatus = `the board model: ${String(err)}`;
       } finally {
         loading = false;
       }
     };
     void loadModel();
     const modelTimer = setInterval(() => void loadModel(), 4000);
-    setArt(art);
+    setArt(artOption);
     // the picture on the board: asked at start, every few seconds, and at once when the app says it changed
     let artBusy = false;
     const checkArt = async (force = false): Promise<void> => {
@@ -385,10 +384,10 @@ vec3 cavemanHash(vec2 p) {
       try {
         const a = await boardArt(force);
         if (disposed) return;
-        // the DLL's word while it answers; the query's picture while the game is not running; otherwise (the DLL
+        // the DLL's word while it answers; the options' picture while the game is not running; otherwise (the DLL
         // not in yet, a status that failed this once) whatever is shown stays
         if (a.injected) setArt(a.path);
-        else if (a.how === 'the game is not running') setArt(art);
+        else if (a.how === 'the game is not running') setArt(artOption);
       } catch {
         // the next check
       } finally {
@@ -478,36 +477,14 @@ vec3 cavemanHash(vec2 p) {
       bindRun++;
       return bindRun < rate;
     };
-    // The stream ends with the game it was reading (a new game is a new process; the trainer could also die). While
-    // a game runs, it is started anew a few seconds later, so a new game session gets its pose without the window
-    // being reopened (2026-10-31: a restarted game left the window at "the stream ended"). The back end keeps one
-    // stream: asking while the old one still lives changes nothing.
-    let streamTimer: ReturnType<typeof setTimeout> | null = null;
-    const restartStream = (): void => {
-      if (disposed || streamTimer) return;
-      streamTimer = setTimeout(() => {
-        streamTimer = null;
-        if (disposed) return;
-        void gameRunning()
-          .then((running) => (running ? live.poseStart(rate) : Promise.reject(new Error('no game'))))
-          .catch(() => restartStream());
-      }, 3000);
-    };
-    const onFrame = (p: PoseFrame): void => {
-      if (p.done) {
-        status = p.gone ? 'the game closed' : 'the stream ended';
-        hasPose = false;
-        restartStream();
-        return;
-      }
-      if (p.error) {
-        status = p.why ?? 'error';
+    const onPose = (p: PoseFrame): void => {
+      if (p.done || p.error) {
+        if (p.done) hasPose = false;
         return;
       }
       const m = rotationOf(p);
       if (!m) {
         hasPose = false;
-        status = p.why && p.why !== 'ok' ? p.why : 'no board';
         return;
       }
       target.setFromRotationMatrix(m);
@@ -568,75 +545,33 @@ vec3 cavemanHash(vec2 p) {
     };
     draw();
 
-    const unlisten = live.onPose(onFrame);
-    live.poseStart(rate).catch((err) => {
-      status = String(err);
-    });
-    const stop = (): void => {
-      void live.poseStop();
-    };
-    window.addEventListener('beforeunload', stop);
+    const offFrame = onFrame(onPose);
+    start(rate);
     return () => {
       disposed = true;
       clearInterval(modelTimer);
-      clearTimeout(hintTimer);
       placeCamera = null;
-      window.removeEventListener('beforeunload', stop);
+      if (viewTimer) clearTimeout(viewTimer);
       cancelAnimationFrame(raf);
       resize.disconnect();
-      void unlisten.then((u) => u());
+      offFrame();
+      stop();
       void unlistenNudge.then((u) => u());
       clearInterval(artTimer);
       if (frameTimer) clearTimeout(frameTimer);
-      if (streamTimer) clearTimeout(streamTimer);
-      stop();
       artTexture?.dispose();
       videoTexture?.dispose();
       pmrem.dispose();
       renderer.dispose();
     };
   });
-
-  function onKey(event: KeyboardEvent): void {
-    if (event.key !== 'Escape') return;
-    if (menu) {
-      menu = null;
-      return;
-    }
-    closeWindow();
-  }
 </script>
 
-<svelte:window onkeydown={onKey} />
-
 <div class="cam" bind:this={host}></div>
-<!-- a drag over the board turns the view, the wheel zooms; the strip at the top moves the window (Tauri's drag region
-     must be the element under the pointer) -->
-<div class="orbit" role="presentation" onpointerdown={onPointerDown} onpointermove={onPointerMove} onpointerup={onPointerUp} onpointercancel={onPointerUp} onwheel={onWheel} oncontextmenu={onContextMenu}></div>
-<div class="grip" data-tauri-drag-region title="Drag here to move the window"></div>
-{#if bounds}
-  <div class="bounds"></div>
-{/if}
-{#if menu}
-  <div class="menu" role="menu" style="left: {menu.x}px; top: {menu.y}px">
-    <button type="button" role="menuitem" onclick={() => { bounds = !bounds; menu = null; }}>{bounds ? 'Hide window bounds' : 'Show window bounds'}</button>
-    <button type="button" role="menuitem" onclick={closeWindow}>Close</button>
-  </div>
-{/if}
-{#if !hasPose || !hasModel}
-  <div class="note">{status}</div>
-{:else if hint}
-  <div class="note">drag to turn the view, scroll to zoom, move by the top strip, right-click for the menu, Escape closes</div>
-{/if}
+<!-- a drag over the board turns the view, the wheel zooms (the frame's strip at the top moves the window) -->
+<div class="orbit" role="presentation" onpointerdown={onPointerDown} onpointermove={onPointerMove} onpointerup={onPointerUp} onpointercancel={onPointerUp} onwheel={onWheel}></div>
 
 <style>
-  :global(html),
-  :global(body),
-  :global(#app) {
-    background: transparent !important;
-    margin: 0;
-    overflow: hidden;
-  }
   .cam {
     position: fixed;
     inset: 0;
@@ -654,61 +589,5 @@ vec3 cavemanHash(vec2 p) {
   }
   .orbit:active {
     cursor: grabbing;
-  }
-  .grip {
-    position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    height: 22px;
-    cursor: move;
-    background: linear-gradient(180deg, rgba(255, 255, 255, 0.0), rgba(255, 255, 255, 0));
-  }
-  .grip:hover {
-    background: linear-gradient(180deg, rgba(255, 255, 255, 0.18), rgba(255, 255, 255, 0));
-  }
-  .note {
-    position: fixed;
-    left: 10px;
-    bottom: 8px;
-    font: 12px system-ui, sans-serif;
-    color: #fff;
-    text-shadow: 0 1px 2px #000, 0 0 6px #000;
-    opacity: 0.85;
-    pointer-events: none;
-  }
-  .bounds {
-    position: fixed;
-    inset: 0;
-    box-sizing: border-box;
-    border: 2px dashed rgba(255, 255, 255, 0.85);
-    background: rgba(0, 0, 0, 0.22);
-    pointer-events: none;
-  }
-  .menu {
-    position: fixed;
-    z-index: 10;
-    min-width: 180px;
-    padding: 4px;
-    background: rgba(24, 24, 28, 0.96);
-    border: 1px solid rgba(255, 255, 255, 0.18);
-    border-radius: 6px;
-    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.5);
-    font: 13px system-ui, sans-serif;
-  }
-  .menu button {
-    display: block;
-    width: 100%;
-    padding: 7px 10px;
-    border: 0;
-    border-radius: 4px;
-    background: transparent;
-    color: #fff;
-    font: inherit;
-    text-align: left;
-    cursor: pointer;
-  }
-  .menu button:hover {
-    background: rgba(255, 255, 255, 0.12);
   }
 </style>

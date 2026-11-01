@@ -3,6 +3,7 @@
   // it, and on the right the way in: Settings, Plugins, Studio and Play.
   import type { LauncherStatus, PluginsConfig } from '../lib/types';
   import { LATEST } from '../lib/changelog';
+  import { WIDGETS } from '../lib/widgets';
 
   interface Props {
     status: LauncherStatus | null;
@@ -51,7 +52,7 @@
   });
   const ready = $derived(!!status && status.gameOk && status.skateBuild !== 'missing');
   const headline = $derived(gameRunning ? (injected ? 'Skating, the FX DLL is in' : injected === false ? 'Skating, without the FX DLL' : 'Skating') : ready ? 'Ready to skate' : 'Not ready');
-  const autostarts = $derived([plugins.obs.autostart ? 'OBS link' : '', plugins.boardcam.autostart ? 'Board cam' : '', plugins.bars.autostart ? 'Soundbars' : ''].filter(Boolean));
+  const autostarts = $derived([plugins.obs.autostart ? 'OBS link' : '', plugins.bars.autostart ? 'Soundbars' : '', ...WIDGETS.filter((w) => plugins.widgets[w.kind]?.autostart).map((w) => w.name)].filter(Boolean));
 </script>
 
 <div class="home">

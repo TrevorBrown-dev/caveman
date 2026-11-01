@@ -11,7 +11,7 @@
     onboardart?: (label: string | null) => void;
     /** Which plugin's sections show: the OBS link (the board, pictures, finish, holo, tint, video), the board cam
      *  window, the bars; or all of them. */
-    show?: 'obs' | 'boardcam' | 'bars' | 'all';
+    show?: 'obs' | 'bars' | 'all';
     /** The plugins' saved settings (the board cam's view, the OBS link's source), and how to save them. */
     plugins?: PluginsConfig;
     onplugins?: (p: PluginsConfig) => void;
@@ -19,7 +19,7 @@
     library?: Library | null;
   }
   let { deck, onsay, onboardart, show = 'all', plugins = DEFAULT_PLUGINS, onplugins, library = null }: Props = $props();
-  const has = (part: 'obs' | 'boardcam' | 'bars'): boolean => show === 'all' || show === part;
+  const has = (part: 'obs' | 'bars'): boolean => show === 'all' || show === part;
 
   /** The DLL's state (`status --json`, about 30 KB) is read this often. */
   const POLL_MS = 2500;
@@ -128,24 +128,6 @@
   /** The settings as last read: a value read again unchanged does not overwrite an edit in progress. */
   let remote: Record<string, unknown> | null = null;
 
-  /** The board cam window (components/BoardCam.svelte): its options, applied at the next Open; kept in the plugins'
-   *  settings. A drag in the window turns the view and comes back here as a `boardcam-view` event. */
-  // svelte-ignore state_referenced_locally
-  let cam = $state<live.BoardCamOptions>({ ...plugins.boardcam, art: null, rate: 60 });
-  // svelte-ignore state_referenced_locally
-  let camArt = $state(plugins.boardcam.art);
-  let camOpen = $state(false);
-  function saveCam(): void {
-    const { size, elevation, azimuth, zoom, turn, mirror, nose } = cam;
-    onplugins?.({ ...plugins, boardcam: { ...plugins.boardcam, size, elevation, azimuth, zoom, turn, mirror, nose, art: camArt } });
-  }
-  function camViewed(v: { elevation: number; azimuth: number; zoom: number }): void {
-    cam.elevation = Math.round(v.elevation);
-    cam.azimuth = Math.round(v.azimuth);
-    cam.zoom = Math.round(v.zoom * 100) / 100;
-    saveCam();
-  }
-
   const injected = $derived(st?.injected === true);
   const board = $derived(st?.board ?? null);
   const equipped = $derived(board ? String(board.equipped ?? '').split(':')[0].trim() : '');
@@ -174,13 +156,13 @@
     onboardart?.(board?.art ?? null);
   });
 
-  // the board cam window follows the picture on the board (it reads it itself): told to look when the label changes
+  // the board cam widget follows the picture on the board (it reads it itself): told to look when the label changes
   let shownOnBoard: string | null | undefined;
   $effect(() => {
     const label = board?.art ?? null;
     if (!st?.injected || label === shownOnBoard) return;
     shownOnBoard = label;
-    if (camOpen) void live.nudgeBoardcam();
+    void live.nudgeBoardcam();
   });
 
   // ---- running trainer commands
@@ -476,34 +458,6 @@
     }
   }
 
-  // ---- the board cam window (outside the game: the pose read from outside, the board drawn here)
-  async function openCam(): Promise<void> {
-    // the picture on the board in the game first; else the selected deck's art (with Art on); else a plain deck
-    let art: string | null = await live.artOnBoard(st, library, lastArt);
-    if (!art && camArt && deck && deck.kind === 'deck' && live.extOf(deck.source) === 'png') {
-      try {
-        art = (await fittedArt(deck.source)).path;
-      } catch (e) {
-        onsay(`The deck art could not be prepared: ${String(e)}`, 'error');
-      }
-    }
-    try {
-      saveCam();
-      await live.boardcamOpen({ ...cam, art });
-      camOpen = true;
-      onsay(`Board cam window open (OBS: window capture "Caveman board cam")${art ? ` with ${deck?.display}` : ''}`);
-    } catch (e) {
-      onsay(`Board cam window: ${String(e)}`, 'error');
-    }
-  }
-  async function closeCam(): Promise<void> {
-    try {
-      await live.boardcamClose();
-    } finally {
-      camOpen = false;
-    }
-  }
-
   // ---- the bars (the overlay's settings)
   function toggleBars(): void {
     const on = !cfg.enabled;
@@ -523,11 +477,6 @@
     let timer: ReturnType<typeof setTimeout> | null = null;
     let offVideo: (() => void) | null = null;
     let offDrop: (() => void) | null = null;
-    let offView: (() => void) | null = null;
-    live
-      .onBoardcamView(camViewed)
-      .then((u) => (alive ? (offView = u) : u()))
-      .catch(() => {});
     live
       .videoRunning()
       .then((r) => (videoRunning = r))
@@ -552,7 +501,6 @@
       if (timer) clearTimeout(timer);
       offVideo?.();
       offDrop?.();
-      offView?.();
     };
   });
 </script>
@@ -560,11 +508,11 @@
 <aside class="live">
   <header>
     <div class="title">
-      <h2>{show === 'obs' ? 'OBS link' : show === 'boardcam' ? 'Board cam window' : show === 'bars' ? 'Soundbars' : 'The Caveman, live'}</h2>
+      <h2>{show === 'obs' ? 'OBS link' : show === 'bars' ? 'Soundbars' : 'The Caveman, live'}</h2>
       {#if st?.dry}<span class="badge" title="CAVEMAN_LIVE_DRY is set: only the read-only trainer commands run, the others are logged">dry run</span>{/if}
     </div>
     <p class="faint">
-      {#if show === 'obs'}OBS's virtual camera, a video or any picture on the ridden board, live: no build, no re-equip. Equip The Caveman deck (Caveman-FX) in the game.{:else if show === 'boardcam'}A see-through window with the board turning as under the skater, read from outside the game; OBS captures it as a window.{:else if show === 'bars'}Equaliser bars on the deck, moving to the PC's sound.{:else}What is set here goes onto the board in the running game at once: no build, no re-equip.{/if}
+      {#if show === 'obs'}OBS's virtual camera, a video or any picture on the ridden board, live: no build, no re-equip. Equip The Caveman deck (Caveman-FX) in the game.{:else if show === 'bars'}Equaliser bars on the deck, moving to the PC's sound.{:else}What is set here goes onto the board in the running game at once: no build, no re-equip.{/if}
     </p>
     <div class="result" class:bad={!busy && last && !last.ok} aria-live="polite">
       {#if busy}
@@ -774,62 +722,6 @@
     </section>
     {/if}
 
-    {#if has('boardcam')}
-    <section>
-      <h3>Board cam window</h3>
-      <div class="row">
-        <span class="dot" class:on={camOpen}></span>
-        <span>A see-through window with the board turning as it does under the skater, read from outside the game; OBS captures it as a window</span>
-      </div>
-      <div class="row">
-        <div class="grow"></div>
-        <button class="small" class:on={camOpen} onclick={openCam}>{camOpen ? 'Reopen' : 'Open'}</button>
-        <button class="small" disabled={!camOpen} onclick={closeCam}>Close</button>
-      </div>
-      <div class="slider">
-        <span class="label">Size</span>
-        <input type="range" min="160" max="900" step="10" bind:value={cam.size} onchange={saveCam} />
-        <span class="value mono">{cam.size} px</span>
-      </div>
-      <div class="slider">
-        <span class="label">From</span>
-        <input type="range" min="-89" max="89" step="1" bind:value={cam.elevation} onchange={saveCam} />
-        <span class="value mono" title="Below the board shows the art, above the grip">{cam.elevation < 0 ? `${-cam.elevation}° below` : `${cam.elevation}° above`}</span>
-      </div>
-      <div class="slider">
-        <span class="label">Around</span>
-        <input type="range" min="-180" max="180" step="1" bind:value={cam.azimuth} onchange={saveCam} />
-        <span class="value mono">{cam.azimuth}°</span>
-      </div>
-      <div class="slider">
-        <span class="label">Zoom</span>
-        <input type="range" min="0.5" max="2" step="0.05" bind:value={cam.zoom} onchange={saveCam} />
-        <span class="value mono" title="1: the whole board fits whichever way it turns">{Number(cam.zoom).toFixed(2)}x</span>
-      </div>
-      <div class="field">
-        <span class="label">Turns with</span>
-        <div class="segmented">
-          <button class:on={cam.turn === 'camera'} onclick={() => { cam.turn = 'camera'; saveCam(); }} title="A flip looks as on screen">the camera</button>
-          <button class:on={cam.turn === 'world'} onclick={() => { cam.turn = 'world'; saveCam(); }}>the world</button>
-        </div>
-      </div>
-      <div class="switches">
-        <label class="check" title="The picture on the board in the game, else the selected deck's art, on the bottom">
-          <input type="checkbox" bind:checked={camArt} onchange={saveCam} />
-          <span>Art</span>
-        </label>
-        <label class="check" title="Left and right swapped">
-          <input type="checkbox" bind:checked={cam.mirror} onchange={saveCam} />
-          <span>Mirror</span>
-        </label>
-        <label class="check" title="The nose the other way">
-          <input type="checkbox" bind:checked={cam.nose} onchange={saveCam} />
-          <span>Nose</span>
-        </label>
-      </div>
-      <p class="hint">Size and the switches apply at the next Open. In the window: drag to turn the view, scroll to zoom (the sliders follow), move it by the strip at its top, Escape closes it.</p>
-    </section>
-    {/if}
 
     {#if has('bars')}
     <section>
@@ -1109,13 +1001,6 @@
     gap: 8px;
     margin: 10px 0 4px;
     cursor: pointer;
-  }
-  .switches {
-    display: flex;
-    gap: 16px;
-  }
-  .switches .check {
-    margin: 6px 0 0;
   }
   .slider {
     display: grid;

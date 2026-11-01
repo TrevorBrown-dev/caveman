@@ -6,7 +6,7 @@
 
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-use caveman_app::{art, bake, config, library, live, loadout, ring};
+use caveman_app::{art, bake, config, library, live, loadout, ring, widgets};
 
 use std::os::windows::ffi::OsStrExt;
 use std::path::{Path, PathBuf};
@@ -61,7 +61,12 @@ fn load_config(app: AppHandle, state: State<'_, AppState>) -> Result<Config, Str
 }
 
 #[tauri::command(async)]
-fn save_config(app: AppHandle, state: State<'_, AppState>, config: Config) -> Result<Config, String> {
+fn save_config(app: AppHandle, state: State<'_, AppState>, mut config: Config) -> Result<Config, String> {
+    // a widget window's place is this side's to keep (it is saved as the window moves): what the front end sends
+    // without one keeps the one on file
+    if let Ok(stored) = current(&app, &state) {
+        widgets::keep_geometry(&mut config.plugins, &stored.plugins);
+    }
     config.save(&config_file(&app)?)?;
     *state.config.lock().unwrap() = Some(config.clone());
     adopt_old_folders(&config);
@@ -598,48 +603,62 @@ async fn pack_build(app: AppHandle, state: State<'_, AppState>, spec: PackSpec) 
     })
 }
 
-/// The board cam window's pose stream (`caveman-trainer pose`), relayed as `board-pose` events. The command line.
+/// A widget window's pose stream (`caveman-trainer pose`), relayed as `board-pose` events to every window: one trainer
+/// process for all of them, stopped with the last window that asked (the asking window is the user). The command line.
 #[tauri::command(async)]
-fn pose_start(app: AppHandle, state: State<'_, AppState>, live_state: State<'_, live::LiveState>, rate: Option<u32>) -> Result<String, String> {
+fn pose_start(
+    window: tauri::Window,
+    app: AppHandle,
+    state: State<'_, AppState>,
+    live_state: State<'_, live::LiveState>,
+    rate: Option<u32>,
+) -> Result<String, String> {
     let trainer = live::trainer_exe(&current(&app, &state)?)?;
-    live::pose_start(&app, &trainer, &live_state, rate.unwrap_or(60))
+    live::pose_start(&app, &trainer, &live_state, rate.unwrap_or(60), window.label())
 }
 
 #[tauri::command]
-fn pose_stop(live_state: State<'_, live::LiveState>) {
-    live::pose_stop(&live_state);
+fn pose_stop(window: tauri::Window, live_state: State<'_, live::LiveState>) {
+    live::pose_release(&live_state, window.label());
 }
 
-/// The board cam window: see-through, without a frame, above everything, for OBS to capture ("Caveman board cam").
-/// Its options travel in `query` (the page is `?view=boardcam&...`). An open one is closed and made again, so new
-/// options apply. Async: closing the old window needs the event loop, which a blocking command would hold.
+/// A widget's window (widgets.rs): see-through, without a frame, above everything, for OBS to capture by its title.
+/// One per kind, labelled `widget-<kind>`; an open one is closed and made again, so new options apply. It opens where
+/// it was last (the settings keep its place and size), else near the top right corner. Async: closing the old window
+/// needs the event loop, which a blocking command would hold.
 #[tauri::command]
-async fn boardcam_open(app: AppHandle, size: u32, query: String) -> Result<(), String> {
-    if let Some(w) = app.get_webview_window("boardcam") {
+async fn widget_open(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    kind: String,
+    title: String,
+    query: String,
+    width: u32,
+    height: u32,
+    index: usize,
+) -> Result<(), String> {
+    let label = widgets::label(&kind);
+    if let Some(w) = app.get_webview_window(&label) {
         let _ = w.close();
         for _ in 0..40 {
-            if app.get_webview_window("boardcam").is_none() {
+            if app.get_webview_window(&label).is_none() {
                 break;
             }
             std::thread::sleep(std::time::Duration::from_millis(50));
         }
     }
-    let size = size.clamp(120, 2000) as f64;
-    // the top right corner of the primary monitor
-    let (x, y) = match app.primary_monitor() {
-        Ok(Some(m)) => ((m.size().width as f64 / m.scale_factor() - size - 24.0).max(0.0), 24.0),
-        _ => (40.0, 40.0),
-    };
-    let mut builder = tauri::WebviewWindowBuilder::new(&app, "boardcam", tauri::WebviewUrl::App(format!("index.html?view=boardcam&{query}").into()));
+    let config = current(&app, &state)?;
+    let g = widgets::place(&app, widgets::saved(&config.plugins, &kind), width.clamp(80, 4000), height.clamp(40, 4000), index);
+    let mut builder = tauri::WebviewWindowBuilder::new(&app, &label, tauri::WebviewUrl::App(format!("index.html?view=widget&kind={kind}&{query}").into()));
     // every webview of the app must be made with the same browser arguments (WebView2 refuses a second one made with
     // other options for the same user data folder: 0x8007139F), so the DevTools port goes on this one too
     if let Some(args) = browser_args() {
         builder = builder.additional_browser_args(&args);
     }
     builder
-        .title("Caveman board cam")
-        .inner_size(size, size)
-        .position(x, y)
+        .title(&title)
+        .inner_size(g.w as f64, g.h as f64)
+        .position(g.x as f64, g.y as f64)
         .decorations(false)
         .transparent(true)
         .always_on_top(true)
@@ -648,15 +667,37 @@ async fn boardcam_open(app: AppHandle, size: u32, query: String) -> Result<(), S
         .resizable(true)
         .build()
         .map_err(|e| e.to_string())?;
+    let _ = app.emit("widget-state", serde_json::json!({"kind": kind, "open": true}));
     Ok(())
 }
 
+/// Closes a widget's window; its reading of the pose stream and the `widget-state` event follow from the window's end.
 #[tauri::command]
-fn boardcam_close(app: AppHandle, live_state: State<'_, live::LiveState>) {
-    if let Some(w) = app.get_webview_window("boardcam") {
+fn widget_close(app: AppHandle, kind: String) {
+    if let Some(w) = app.get_webview_window(&widgets::label(&kind)) {
         let _ = w.close();
     }
-    live::pose_stop(&live_state);
+}
+
+/// The kinds whose windows are open.
+#[tauri::command]
+fn widget_list(app: AppHandle) -> Vec<String> {
+    app.webview_windows().keys().filter_map(|l| widgets::kind_of(l).map(str::to_string)).collect()
+}
+
+/// A widget window's place and size into the settings (`plugins.widgets.<kind>.window`), for its next opening.
+fn save_widget_geometry(app: &AppHandle, label: &str, g: widgets::Geometry) {
+    let Some(kind) = widgets::kind_of(label) else { return };
+    let state = app.state::<AppState>();
+    let Ok(mut config) = current(app, &state) else { return };
+    if widgets::saved(&config.plugins, kind) == Some(g) {
+        return;
+    }
+    widgets::store(&mut config.plugins, kind, g);
+    if let Ok(file) = config_file(app) {
+        let _ = config.save(&file);
+    }
+    *state.config.lock().unwrap() = Some(config);
 }
 
 #[tauri::command(async)]
@@ -767,13 +808,49 @@ fn main() {
         .manage(AppState::default())
         .manage(live::LiveState::default())
         .manage(ring::RingState::default())
-        // the board cam window goes with the main one (on its own it would keep the app alive, drawn over whatever
-        // is on the screen)
+        .manage(widgets::WidgetState::default())
         .on_window_event(|window, event| {
-            if window.label() == "main" && matches!(event, tauri::WindowEvent::Destroyed) {
-                if let Some(cam) = window.app_handle().get_webview_window("boardcam") {
-                    let _ = cam.close();
+            let app = window.app_handle().clone();
+            let label = window.label().to_string();
+            match event {
+                tauri::WindowEvent::Destroyed => {
+                    // a window's reading of the pose stream ends with it (the stream itself with the last reader)
+                    live::pose_release(&app.state::<live::LiveState>(), &label);
+                    if let Some(kind) = widgets::kind_of(&label) {
+                        let _ = app.emit("widget-state", serde_json::json!({"kind": kind, "open": false}));
+                    }
+                    // the widget windows go with the main one (on their own they would keep the app alive, drawn
+                    // over whatever is on the screen)
+                    if label == "main" {
+                        for (l, w) in app.webview_windows() {
+                            if widgets::kind_of(&l).is_some() {
+                                let _ = w.close();
+                            }
+                        }
+                    }
                 }
+                // a widget window's place and size are kept, once it has held still for a moment
+                tauri::WindowEvent::Moved(_) | tauri::WindowEvent::Resized(_) if widgets::kind_of(&label).is_some() => {
+                    if let (Ok(pos), Ok(size), Ok(scale)) = (window.outer_position(), window.inner_size(), window.scale_factor()) {
+                        let g = widgets::Geometry {
+                            x: (pos.x as f64 / scale).round() as i32,
+                            y: (pos.y as f64 / scale).round() as i32,
+                            w: (size.width as f64 / scale).round() as u32,
+                            h: (size.height as f64 / scale).round() as u32,
+                        };
+                        if g.w < 80 || g.h < 40 {
+                            return;
+                        }
+                        let at = app.state::<widgets::WidgetState>().note(&label, g);
+                        std::thread::spawn(move || {
+                            std::thread::sleep(std::time::Duration::from_millis(600));
+                            if let Some(g) = app.state::<widgets::WidgetState>().settled(&label, at) {
+                                save_widget_geometry(&app, &label, g);
+                            }
+                        });
+                    }
+                }
+                _ => {}
             }
         })
         .invoke_handler(tauri::generate_handler![
@@ -807,8 +884,9 @@ fn main() {
             live_stage_png,
             pose_start,
             pose_stop,
-            boardcam_open,
-            boardcam_close
+            widget_open,
+            widget_close,
+            widget_list
         ])
         .build(tauri::generate_context!())
         .expect("error while starting Caveman")

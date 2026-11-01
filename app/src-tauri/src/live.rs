@@ -127,15 +127,19 @@ struct Producer {
 #[derive(Default)]
 pub struct LiveState {
     video: Mutex<Option<Producer>>,
-    /// The board cam window's pose stream (`pose`), while it runs.
+    /// The widget windows' pose stream (`pose`), while it runs: one for all of them.
     pose: Mutex<Option<Child>>,
+    /// The windows reading it (their labels); the stream stops with the last one.
+    pose_users: Mutex<std::collections::HashSet<String>>,
 }
 
 /// Starts `pose --rate N` (the camera and the board read from outside the game, one JSON line per tick) and relays
 /// each line as a `board-pose` event (the parsed JSON; `{"done": true}` when the stream ends, `{"error": true, "why"}`
-/// for a line on stderr). One stream at a time; returns the command line.
-pub fn pose_start(app: &AppHandle, trainer: &Path, state: &LiveState, rate: u32) -> Result<String, String> {
+/// for a line on stderr). One stream for every window; `user` (the asking window's label) is counted, and the stream
+/// ends when the last user lets go (`pose_release`). Returns the command line.
+pub fn pose_start(app: &AppHandle, trainer: &Path, state: &LiveState, rate: u32, user: &str) -> Result<String, String> {
     use std::io::BufRead;
+    state.pose_users.lock().unwrap().insert(user.to_string());
     // with the rig's 16 bones each tick (the window moves the trucks and wheels by them)
     let args = vec!["pose".to_string(), "--rate".to_string(), rate.clamp(1, 240).to_string(), "--bones".to_string()];
     let command = command_line(&args);
@@ -179,11 +183,24 @@ pub fn pose_start(app: &AppHandle, trainer: &Path, state: &LiveState, rate: u32)
     Ok(command)
 }
 
-/// Ends the pose stream (nothing when none runs).
+/// Ends the pose stream whoever reads it (nothing when none runs).
 pub fn pose_stop(state: &LiveState) {
+    state.pose_users.lock().unwrap().clear();
     if let Some(mut child) = state.pose.lock().unwrap().take() {
         let _ = child.kill();
         let _ = child.wait();
+    }
+}
+
+/// One window lets go of the pose stream (it closed, or its widget stopped): the stream ends with the last one.
+pub fn pose_release(state: &LiveState, user: &str) {
+    let last = {
+        let mut users = state.pose_users.lock().unwrap();
+        users.remove(user);
+        users.is_empty()
+    };
+    if last {
+        pose_stop(state);
     }
 }
 
