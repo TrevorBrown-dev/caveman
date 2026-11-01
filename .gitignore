@@ -17,3 +17,6 @@ __pycache__/
 *.cas
 *.toc
 initfs_win32
+
+# Personal Claude Code settings for this checkout (permission rules); the shared guidance is CLAUDE.md and AGENTS.md
+/.claude/settings.local.json
