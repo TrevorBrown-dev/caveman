@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Download Caveman
+    url: https://trevorbrown.dev/gh/caveman
+    about: The latest release, with the three steps to install it.
+  - name: Report a security problem privately
+    url: https://github.com/TrevorBrown-dev/caveman/security/advisories/new
+    about: Anything that could harm a player's game, files or PC. See SECURITY.md.

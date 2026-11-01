@@ -1,0 +1,85 @@
+# Every push and pull request: format, lint, test, and build everything a release would ship. Windows only, as the
+# project is (the DLL and the trainer are Win32; the game is too). The game itself is not on the runner, so the tests
+# that read it are `#[ignore]` and stay so; see AGENTS.md.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: fmt, clippy, tests, builds
+    runs-on: windows-latest
+    timeout-minutes: 45
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Rust (stable, rustfmt, clippy)
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Cargo cache
+        uses: Swatinem/rust-cache@v2
+
+      - name: pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11
+
+      - name: Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: app/pnpm-lock.yaml
+
+      - name: Format
+        run: cargo fmt --all -- --check
+
+      - name: Clippy (warnings are errors)
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
+      # The two D3D12 host tests load target\debug\caveman_fx.dll, which `cargo test` links against but does not write
+      # out; a plain build does.
+      - name: Build the DLL the host tests load
+        run: cargo build -p caveman-fx
+
+      - name: Tests
+        run: cargo test --workspace
+
+      - name: Front end (install, svelte-check)
+        working-directory: app
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm check
+
+      - name: Build the command line, the trainer, the DLL and Caveman.exe
+        run: cargo build --release
+
+      - name: Build the app
+        working-directory: app
+        run: pnpm tauri build --no-bundle
+
+      - name: Assemble the release layout
+        run: ./.github/scripts/assemble.ps1 -Out dist
+
+      - name: Upload the layout
+        uses: actions/upload-artifact@v4
+        with:
+          name: Caveman-win64
+          path: dist/
+          if-no-files-found: error

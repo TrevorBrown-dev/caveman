@@ -1,0 +1,95 @@
+# A tag `v*` makes a release: the same checks and builds as CI, then `Caveman-win64.zip` on a GitHub release. The
+# download page (docs/index.html) always points at the newest release's zip of that name, so a release needs nothing
+# else. Tag from main: `git tag v0.2.0 && git push origin v0.2.0`.
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: build and publish
+    runs-on: windows-latest
+    timeout-minutes: 45
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Rust (stable, rustfmt, clippy)
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Cargo cache
+        uses: Swatinem/rust-cache@v2
+
+      - name: pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11
+
+      - name: Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: app/pnpm-lock.yaml
+
+      - name: Checks
+        run: |
+          cargo fmt --all -- --check
+          cargo clippy --workspace --all-targets -- -D warnings
+          cargo build -p caveman-fx
+          cargo test --workspace
+
+      - name: Front end
+        working-directory: app
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm check
+
+      - name: Build
+        run: cargo build --release
+
+      - name: Build the app
+        working-directory: app
+        run: pnpm tauri build --no-bundle
+
+      - name: Assemble and zip
+        run: |
+          ./.github/scripts/assemble.ps1 -Out dist
+          Compress-Archive -Path dist/* -DestinationPath Caveman-win64.zip
+          Get-Item Caveman-win64.zip | Select-Object Name, Length
+
+      - name: Release notes from the changelog
+        id: notes
+        run: |
+          $tag = "${{ github.ref_name }}"
+          $version = $tag.TrimStart("v")
+          $lines = Get-Content CHANGELOG.md
+          $start = ($lines | Select-String -Pattern "^## $([regex]::Escape($version))\b" | Select-Object -First 1).LineNumber
+          $body = @()
+          if ($start) {
+            for ($i = $start; $i -lt $lines.Count; $i++) {
+              if ($lines[$i] -match '^## ') { break }
+              $body += $lines[$i]
+            }
+          }
+          if ($body.Count -eq 0) { $body = @("See CHANGELOG.md.") }
+          $body += ""
+          $body += "Unzip into your ReSkate folder (the one with ReSkateLauncher.exe). Install steps and questions: https://trevorbrown.dev/gh/caveman"
+          $body | Set-Content -Encoding utf8 release-notes.md
+
+      - name: Publish the release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: Caveman ${{ github.ref_name }}
+          body_path: release-notes.md
+          files: Caveman-win64.zip
+          fail_on_unmatched_files: true

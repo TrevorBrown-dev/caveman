@@ -1,0 +1,21 @@
+name: Feature request
+description: Something Caveman could do, or do better
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: want
+    attributes:
+      label: What you would like
+      description: What you want to be able to do, as a player or a creator. The problem matters more than the solution.
+    validations:
+      required: true
+  - type: textarea
+    id: today
+    attributes:
+      label: What you do today instead
+      description: The workaround, if there is one, or the tool you use for it.
+  - type: textarea
+    id: notes
+    attributes:
+      label: Anything else
+      description: Pictures, examples from the game, links. If you know how the game does it, say so; the knowledge is half the work.

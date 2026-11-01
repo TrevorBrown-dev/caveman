@@ -1,0 +1,48 @@
+name: Bug report
+description: Something broke, crashed, or came out wrong
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks. The more of this you fill in, the faster it gets fixed. Crash logs and screenshots help a lot.
+  - type: input
+    id: versions
+    attributes:
+      label: Versions
+      description: Caveman version (the front page shows it), ReSkate version, and whether skate. updated recently
+      placeholder: "Caveman 0.2.0, ReSkate 2.1.3"
+    validations:
+      required: true
+  - type: dropdown
+    id: part
+    attributes:
+      label: Which part
+      options:
+        - The build (decks, wheels, grips, patterns not showing or wrong in game)
+        - The app (Studio, Packs, settings, the window itself)
+        - Caveman.exe (the launcher)
+        - The FX DLL or trainer (plugins, OBS link, board cam, soundbars, the game crashing with the DLL in)
+        - The command line (caveman, caveman-trainer)
+        - Something else
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what you expected, what you got. If the game crashed, say when (startup, loading, equipping, during a session).
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs and files
+      description: |
+        Paste what applies: the build log from the app, `%LOCALAPPDATA%\Caveman\fx\attach.log` or `fx.log` for the DLL, ReSkate's own log. The PNG that misbehaves, attached or linked, if the problem is one deck.
+      render: text
+  - type: input
+    id: mods
+    attributes:
+      label: Other mods installed
+      placeholder: "ReSkate Studio decks, a Thunderstore pack, nothing else"

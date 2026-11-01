@@ -1,0 +1,356 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Caveman</title>
+  <meta name="description" content="Your own decks, wheels and grip tape in skate. through ReSkate: drop a PNG in a folder and ride it." />
+  <meta property="og:type" content="website" />
+  <meta property="og:title" content="Caveman" />
+  <meta property="og:description" content="Your own decks, wheels and grip tape in skate. through ReSkate: drop a PNG in a folder and ride it." />
+  <meta property="og:image" content="https://trevorbrown-dev.github.io/caveman/icon.png" />
+  <meta property="og:url" content="https://trevorbrown-dev.github.io/caveman/" />
+  <meta name="theme-color" content="#14110d" />
+  <link rel="icon" href="icon.png" />
+  <style>
+    :root {
+      --bg: #14110d;
+      --panel: #1f1a14;
+      --border: #3a3024;
+      --text: #f4ede2;
+      --muted: #b5a894;
+      --accent: #e8a24a;
+      --accent-hover: #ffb964;
+      --accent-text: #2a1a06;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html {
+      color-scheme: dark;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      color: var(--text);
+      font-family: "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, sans-serif;
+      font-size: 17px;
+      line-height: 1.5;
+      background:
+        radial-gradient(900px 500px at 15% -10%, rgba(170, 110, 50, 0.28), transparent 60%),
+        radial-gradient(700px 400px at 100% 110%, rgba(232, 162, 74, 0.14), transparent 60%),
+        var(--bg);
+      -webkit-font-smoothing: antialiased;
+    }
+
+    main {
+      max-width: 660px;
+      margin: 0 auto;
+      padding: 56px 20px 48px;
+      text-align: center;
+    }
+
+    .logo {
+      width: 96px;
+      height: 96px;
+      border-radius: 22px;
+      box-shadow: 0 14px 40px rgba(0, 0, 0, 0.45);
+    }
+
+    h1 {
+      margin: 22px 0 10px;
+      font-size: 40px;
+      font-weight: 700;
+      letter-spacing: -0.5px;
+      line-height: 1.1;
+    }
+
+    .lede {
+      margin: 0 auto 32px;
+      max-width: 520px;
+      color: var(--muted);
+      font-size: 19px;
+    }
+
+    .download {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 16px;
+      width: 100%;
+      padding: 22px 28px;
+      border-radius: 18px;
+      background: var(--accent);
+      color: var(--accent-text);
+      text-decoration: none;
+      box-shadow: 0 12px 34px rgba(232, 162, 74, 0.35);
+      transition: transform 0.08s ease, background 0.12s ease, box-shadow 0.12s ease;
+    }
+
+    .download:hover {
+      background: var(--accent-hover);
+      transform: translateY(-2px);
+      box-shadow: 0 18px 40px rgba(232, 162, 74, 0.45);
+    }
+
+    .download:active {
+      transform: translateY(0);
+    }
+
+    .download svg {
+      width: 40px;
+      height: 40px;
+      flex-shrink: 0;
+    }
+
+    .download .text {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      text-align: left;
+    }
+
+    .download strong {
+      font-size: 26px;
+      font-weight: 700;
+      line-height: 1.15;
+    }
+
+    .download small {
+      font-size: 14px;
+      font-weight: 600;
+      opacity: 0.8;
+    }
+
+    .fine {
+      margin: 14px 0 0;
+      font-size: 14px;
+      color: var(--muted);
+    }
+
+    .fine a,
+    footer a,
+    .faq a {
+      color: var(--accent);
+    }
+
+    .notice {
+      display: none;
+      margin: 22px auto 0;
+      max-width: 520px;
+      padding: 12px 16px;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      background: var(--panel);
+      color: var(--muted);
+      font-size: 15px;
+    }
+
+    .notice.show {
+      display: block;
+    }
+
+    section {
+      margin-top: 48px;
+      text-align: left;
+    }
+
+    h2 {
+      margin: 0 0 14px;
+      font-size: 22px;
+      font-weight: 650;
+    }
+
+    ol.steps {
+      margin: 0;
+      padding: 0;
+      list-style: none;
+      counter-reset: step;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    ol.steps li {
+      counter-increment: step;
+      position: relative;
+      padding: 16px 18px 16px 62px;
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      color: var(--muted);
+    }
+
+    ol.steps li::before {
+      content: counter(step);
+      position: absolute;
+      left: 18px;
+      top: 15px;
+      width: 30px;
+      height: 30px;
+      border-radius: 50%;
+      background: var(--accent);
+      color: var(--accent-text);
+      font-weight: 700;
+      display: grid;
+      place-items: center;
+    }
+
+    ol.steps strong {
+      display: block;
+      margin-bottom: 2px;
+      color: var(--text);
+    }
+
+    .faq details {
+      border-top: 1px solid var(--border);
+      padding: 12px 0;
+      color: var(--muted);
+    }
+
+    .faq details:last-child {
+      border-bottom: 1px solid var(--border);
+    }
+
+    .faq summary {
+      cursor: pointer;
+      font-weight: 600;
+      color: var(--text);
+    }
+
+    .faq p {
+      margin: 8px 0 0;
+    }
+
+    code {
+      font-family: Consolas, "Cascadia Mono", ui-monospace, monospace;
+      font-size: 0.92em;
+      background: rgba(255, 255, 255, 0.07);
+      padding: 1px 6px;
+      border-radius: 6px;
+    }
+
+    footer {
+      margin-top: 48px;
+      font-size: 14px;
+      color: var(--muted);
+    }
+
+    @media (max-width: 520px) {
+      main {
+        padding-top: 40px;
+      }
+
+      h1 {
+        font-size: 32px;
+      }
+
+      .download strong {
+        font-size: 22px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <img class="logo" src="icon.png" alt="" width="96" height="96" />
+    <h1>Caveman</h1>
+    <p class="lede">Your own decks, wheels and grip tape in skate. through ReSkate: drop a PNG in a folder and ride it. Open source, free.</p>
+
+    <!-- The href is the whole mechanism: GitHub redirects it to the newest release's asset of this name. -->
+    <a class="download" id="download" href="https://github.com/TrevorBrown-dev/caveman/releases/latest/download/Caveman-win64.zip">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M12 3v12" />
+        <path d="m7 10 5 5 5-5" />
+        <path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" />
+      </svg>
+      <span class="text">
+        <strong>Download for Windows</strong>
+        <small id="meta">Latest version</small>
+      </span>
+    </a>
+    <p class="fine">Windows 10 or 11 &middot; skate. on PC with <a href="https://reskate.gg">ReSkate</a> 2.1.3 &middot; <a href="https://github.com/TrevorBrown-dev/caveman/releases">all versions</a></p>
+    <p class="notice" id="notice">Caveman is a Windows program for the PC version of skate. with ReSkate installed. Open this page on that PC to download it.</p>
+
+    <section>
+      <h2>Then</h2>
+      <ol class="steps">
+        <li>
+          <strong>Unzip it into your ReSkate folder</strong>
+          The folder that holds <code>ReSkateLauncher.exe</code>. You get <code>Caveman.exe</code> beside it and a <code>Caveman</code> folder with the app, the trainer and the FX DLL.
+        </li>
+        <li>
+          <strong>Let Windows run it</strong>
+          Caveman is not signed yet, so SmartScreen asks the first time: <em>More info</em>, then <em>Run anyway</em>.
+        </li>
+        <li>
+          <strong>Drop PNGs in <code>Caveman\Decks</code> and press Play</strong>
+          <code>Caveman.exe</code> builds your decks into a mod and starts ReSkate's launcher. <code>Caveman\caveman-app.exe</code> is the full launcher: the Studio with the 3D preview, wheels, grips and patterns, Thunderstore packs, and the plugins (the OBS link and the board cam).
+        </li>
+      </ol>
+    </section>
+
+    <section class="faq">
+      <h2>Questions</h2>
+      <details>
+        <summary>Where does it write?</summary>
+        <p>Inside your ReSkate folder: the mods it builds (<code>Mods\Caveman-Decks</code>, <code>Mods\Caveman-Shaders</code> when a deck needs it) and the <code>Caveman</code> folder with your art and its previews. Its settings live in <code>%APPDATA%\dev.caveman.app</code>. It never touches the game's own files.</p>
+      </details>
+      <details>
+        <summary>How do I remove it?</summary>
+        <p>Delete <code>Caveman.exe</code>, the <code>Caveman</code> folder and the <code>Mods\Caveman-*</code> folders from your ReSkate folder. Your PNGs are yours; move them out first if you want to keep them.</p>
+      </details>
+      <details>
+        <summary>What is the FX DLL?</summary>
+        <p>The optional part behind the plugins: a picture or live video on the board you ride, the soundbars, the board cam window for your stream. It goes into the running game only when you switch the plugins on, and comes out with <code>caveman-trainer unload</code>. Everything is open source, and the downloads here are built by GitHub's own servers from that code.</p>
+      </details>
+      <details>
+        <summary>Does it work with other mods?</summary>
+        <p>Yes. What Caveman builds is an ordinary ReSkate mod next to the others. The Packs page turns your decks and wheels into a Thunderstore package that needs nothing of Caveman to play.</p>
+      </details>
+    </section>
+
+    <footer>
+      Open source under the GPL-3.0 on <a href="https://github.com/TrevorBrown-dev/caveman">GitHub</a>. Not affiliated with EA, Full Circle or ReSkate.
+    </footer>
+  </main>
+
+  <script>
+    (function () {
+      // Decoration only: version, size and date on the button. The static href already works.
+      fetch("https://api.github.com/repos/TrevorBrown-dev/caveman/releases/latest")
+        .then((r) => (r.ok ? r.json() : Promise.reject(new Error(r.statusText))))
+        .then((rel) => {
+          const asset = (rel.assets || []).find((a) => a.name === "Caveman-win64.zip");
+          const parts = [rel.tag_name];
+          if (asset) parts.push(`${Math.round(asset.size / 1048576)} MB`);
+          if (rel.published_at) {
+            parts.push(new Date(rel.published_at).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" }));
+          }
+          document.getElementById("meta").textContent = parts.join(" · ");
+          if (asset) document.getElementById("download").href = asset.browser_download_url;
+        })
+        .catch(() => {});
+
+      // Visitors on another OS (a phone, most often) get the notice.
+      if (!/Windows/i.test(navigator.userAgent)) {
+        document.getElementById("notice").classList.add("show");
+      }
+    })();
+  </script>
+  <script src="https://storage.ko-fi.com/cdn/scripts/overlay-widget.js"></script>
+  <script>
+    if (window.kofiWidgetOverlay) {
+      kofiWidgetOverlay.draw("trevorbrowndev", {
+        "type": "floating-chat",
+        "floating-chat.donateButton.text": "Support me",
+        "floating-chat.donateButton.background-color": "#e8a24a",
+        "floating-chat.donateButton.text-color": "#2a1a06"
+      });
+    }
+  </script>
+</body>
+</html>

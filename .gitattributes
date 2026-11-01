@@ -1,0 +1,11 @@
+# Line endings: LF in the repository, LF in every checkout (the toolchain, rustfmt and CI all run on Windows and are
+# happy with it; mixed endings would churn diffs).
+* text=auto eol=lf
+
+# Binary as binary
+*.png binary
+*.jpg binary
+*.ico binary
+*.dxbc binary
+*.glb binary
+*.woff2 binary
