@@ -14,6 +14,9 @@ updates:
       # png 0.18 changed the decoder's API (its reader must seek); taken by hand when the readers are adapted
       - dependency-name: "png"
         update-types: ["version-update:semver-minor"]
+      # the windows crate's 0.x minors are breaking (0.54 to 0.62 reshapes the D3D12 bindings the DLL uses); by hand
+      - dependency-name: "windows"
+        update-types: ["version-update:semver-minor"]
     commit-message:
       prefix: "deps(cargo)"
 
@@ -26,6 +29,10 @@ updates:
       npm:
         patterns:
           - "*"
+    ignore:
+      # TypeScript 7 is the Go compiler; svelte-check needs both 6 and 7 installed and a flag. Taken by hand.
+      - dependency-name: "typescript"
+        update-types: ["version-update:semver-major"]
     commit-message:
       prefix: "deps(app)"
 
