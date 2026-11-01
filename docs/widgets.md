@@ -11,7 +11,7 @@ Widgets are the see-through, frameless, always-on-top windows Caveman puts over 
 
 ## The frame and the windows
 
-`WidgetFrame.svelte` is the page of every widget window (`index.html?view=widget&kind=<kind>&<options>`; `main.ts` routes it, and the old `?view=boardcam` still opens the board cam). It draws the strip at the top that moves the window (Tauri's drag region), the right-click menu (show the window's bounds while placing it, the widget's items, Close), Escape, the hint and the status line. The windows resize by their edges.
+`WidgetFrame.svelte` is the page of every widget window (`index.html?view=widget&kind=<kind>&<options>`; `main.ts` routes it, and the old `?view=boardcam` still opens the board cam). It draws the strip at the top that moves the window (Tauri's drag region), the right-click menu (show the window's bounds while placing it, the widget's items, Close), Escape, the hint and the status line. The windows resize by their edges. A widget with no clicks of its own can make its whole body the drag region as the speed meter does (`data-tauri-drag-region` on the panel, `pointer-events: none` on its children, since Tauri starts the drag only when the element under the pointer carries the attribute); the board cam cannot, because a drag over the board turns the view.
 
 The back end (`app/src-tauri/src/widgets.rs`, the commands in `main.rs`) makes a window per kind, labelled `widget-<kind>`, with the flags that make it an overlay (no decorations, transparent, always on top, no taskbar entry, no shadow), and:
 

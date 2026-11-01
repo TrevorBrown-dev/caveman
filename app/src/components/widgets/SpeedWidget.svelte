@@ -23,8 +23,10 @@
   });
 </script>
 
-<div class="speed" class:dim={options.dim !== false}>
-  <div class="inner">
+<!-- nothing in this widget is clicked, so the whole panel moves the window (Tauri's drag region must be the element under
+     the pointer: the panel's children let the pointer through) -->
+<div class="speed" class:dim={options.dim !== false} data-tauri-drag-region>
+  <div class="inner" data-tauri-drag-region>
     {#if options.label !== false}
       <div class="caption">Speed</div>
     {/if}
@@ -65,6 +67,11 @@
   .bar,
   .top {
     flex: none;
+    pointer-events: none;
+  }
+  .speed,
+  .inner {
+    cursor: move;
   }
   .dim .inner {
     background: rgba(10, 8, 12, 0.58);

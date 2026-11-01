@@ -79,7 +79,7 @@ export const WIDGETS: WidgetDef[] = [
     height: 120,
     needs: ['pose'],
     defaults: { units: 'kmh', decimals: 0, max: true, label: true, dim: true, rate: 60 },
-    hint: 'move by the top strip, resize by the edges, right-click for the menu, Escape closes',
+    hint: 'drag the panel to move it, resize by the edges, right-click for the menu, Escape closes',
     component: () => import('../components/widgets/SpeedWidget.svelte'),
     settings: () => import('../components/widgets/SpeedSettings.svelte'),
   },
