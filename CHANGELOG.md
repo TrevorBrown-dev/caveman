@@ -1,0 +1,22 @@
+# Caveman changelog
+
+The launcher shows the newest entry's bullets on its front page. Keep each entry short: what a player notices, one line each. Older work (before 0.2.0) is in `docs/` and the knowledge base, not backfilled here.
+
+## 0.2.0 (2026-10-30)
+
+- Caveman is a launcher now: a front page with the game's state, Plugins, Studio and Play, laid out like ReSkate's own launcher.
+- Studio: the deck and wheel library with a switch per item for what goes into the game, the editor and the 3D preview, buttons to open the art folders and to get the templates.
+- Packs: a mod generator that builds chosen decks and wheels into a Thunderstore-ready package (`Owner-Name-1.0.0.zip` with its manifest, icon, README and changelog) that needs nothing of Caveman to play.
+- Plugins: the OBS link (video and pictures on the ridden board), the board cam window and the soundbars, each with its settings and a switch to start it with the game.
+- Console: every `caveman-trainer` command, with completion, for debugging.
+- The FX DLL goes into the game by itself when Caveman starts it (the staging ring on by default); the particle effect test decks are parked.
+- The board cam window draws the game's own board: the deck and the equipped trucks' and wheels' own meshes with their textures, the grip colour and cutout, the wheel colour or wheel graphic, the bolt heads through the grip, grit and sparkle on the grip, and the trucks steering and the wheels spinning from the game's rig. Everything comes from your own install and your ReSkate profile.
+- The board cam window reads what is on the board by itself: the picture the DLL put there (whichever page is open, however late the window was opened) and the OBS link's video frames from the same ring the game draws from. Wheels no longer twitch on a board standing still (frames caught between the game's two pose passes are skipped).
+- The board cam window closes with Caveman, and a right-click on it gives a menu: show the window's bounds while you place it, or close it. It also picks up a new game session by itself: when its pose stream ends with the game, it starts a new one as soon as a game runs again.
+- The board cam window no longer freezes for a blink every two seconds (the wheels held still, now and then a trick): the pose stream's look for the game's worlds, which opens every thread of the game, runs on a thread of its own now, and the app's slower commands (the check whether the game runs among them) no longer hold the window's events back.
+- The FX DLL no longer sleeps through a session when it goes in before the game is ready, and no longer wakes up in the middle of the game's start either (that ended the game twice on 2026-10-31): it waits until the game has been in a world with a camera for a few seconds, the frontend at the earliest, and starts then. Before, a game started while Caveman was open could end up with a DLL that queued your picture and never wrote it.
+- The picture last put on the board comes back by itself in your next game session.
+- Grips and grip patterns: drop a PNG in `Caveman\Grips` for a picture printed on the grip tape (`Name.ff69b4.png` puts coloured grit under it; an empty `Name.ff69b4.grip` is plain grip in that colour), and a PNG in `Caveman\Patterns` for a pattern cut out of the grip so the wood shows (its transparency or its lightness; a 1:4 picture covers the deck, anything else repeats as a tile). They build into the same mod as your decks and wheels, with thumbnails of the deck from above, and show in the game's Grip Color and Grip Pattern lists. The Studio does not list them yet.
+- One `Caveman` folder beside the game holds everything of Caveman's but the exe: `Decks`, `Wheels`, `Imports`, `Packs`, `Templates`, `Archive`, the FX DLL and the trainer. The old `Caveman Decks`, `Caveman Wheels` and `Caveman Imports` folders move into it on the first run; nothing about your decks changes in game.
+- Checked against ReSkate 2.1.3 (same game build): the mods merge, the DLL hooks, the ring, the live material writes and the pose stream all work.
+- Caveman is open source under the GPL-3.0 at github.com/TrevorBrown-dev/caveman, with a download page at trevorbrown.dev/gh/caveman. Releases are built by GitHub from the tagged source; pull requests, from people and from people working with coding agents, are welcome.

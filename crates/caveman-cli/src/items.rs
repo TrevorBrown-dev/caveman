@@ -14,6 +14,17 @@ use crate::report::Reporter;
 /// in `mods_dir` counts except `skip` (Caveman's own) and dot-folders; a mod that cannot be read cannot collide
 /// either, so it gets a note and is passed over.
 pub fn existing_items(game: &Arc<Game>, mods_dir: &Path, skip: &str, report: &mut Reporter) -> Result<BTreeMap<String, String>, Box<dyn std::error::Error>> {
+    existing_items_except(game, mods_dir, &[skip], report)
+}
+
+/// [`existing_items`] with several mods left out of the count (a pack's build leaves out every Caveman-built mod,
+/// whose items may be the same decks under the same names).
+pub fn existing_items_except(
+    game: &Arc<Game>,
+    mods_dir: &Path,
+    skip: &[&str],
+    report: &mut Reporter,
+) -> Result<BTreeMap<String, String>, Box<dyn std::error::Error>> {
     let mut taken = BTreeMap::new();
     let shared = game.bundle(SHARED, ITEMS_TOC)?;
     for e in &shared.manifest.ebx {
@@ -28,7 +39,7 @@ pub fn existing_items(game: &Arc<Game>, mods_dir: &Path, skip: &str, report: &mu
     mods.sort();
     for m in mods {
         let root = mods_dir.join(&m);
-        if m.starts_with('.') || m == skip || !root.join("Win32").join(ITEMS_TOC).is_file() {
+        if m.starts_with('.') || skip.iter().any(|s| s.eq_ignore_ascii_case(&m)) || !root.join("Win32").join(ITEMS_TOC).is_file() {
             continue;
         }
         if let Err(error) = mod_items(game, &root, &m, &mut taken) {

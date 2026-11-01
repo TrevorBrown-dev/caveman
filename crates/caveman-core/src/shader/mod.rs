@@ -65,11 +65,7 @@ pub type MarkerBlock = (u32, u32, u32, u32, (u8, u8, u8));
 /// effect, the speed (G / 255 x 2 turns a second) and the glow strength (the emissive is the colour x
 /// 2^(12 B / 255) - 1).
 pub fn marker_pixels(effect: u8, speed: u8, glow: u8) -> [MarkerBlock; 3] {
-    [
-        (0, 0, BLOCK, BLOCK, MARK_A),
-        (BLOCK, 0, 2 * BLOCK, BLOCK, MARK_B),
-        (2 * BLOCK, 0, 3 * BLOCK, BLOCK, (effect, speed, glow)),
-    ]
+    [(0, 0, BLOCK, BLOCK, MARK_A), (BLOCK, 0, 2 * BLOCK, BLOCK, MARK_B), (2 * BLOCK, 0, 3 * BLOCK, BLOCK, (effect, speed, glow))]
 }
 
 /// What went wrong in the shader layer.
@@ -140,11 +136,7 @@ pub fn programs() -> Vec<(&'static str, Patch)> {
 /// [`programs`], the deck programs with the flipbook when `animated`.
 pub fn programs_with(animated: bool) -> Vec<(&'static str, Patch)> {
     let deck = if animated { Patch::DeckAnim } else { Patch::Deck };
-    DECK_PROGRAMS
-        .iter()
-        .map(|g| (*g, deck))
-        .chain([(RIBBON_PROGRAM, Patch::Ribbon), (ribbon_vs::RIBBON_VS_PROGRAM, Patch::RibbonVs)])
-        .collect()
+    DECK_PROGRAMS.iter().map(|g| (*g, deck)).chain([(RIBBON_PROGRAM, Patch::Ribbon), (ribbon_vs::RIBBON_VS_PROGRAM, Patch::RibbonVs)]).collect()
 }
 
 /// A program's patched disassembly and note (`shaderpatch.patch` / `nyanpatch.patch`).
@@ -154,10 +146,9 @@ pub fn patch_ir(which: Patch, ir_text: &str) -> Result<(String, String), ShaderE
         Patch::DeckAnim => deck::patch_anim(ir_text).map_err(ShaderError::Patch),
         Patch::Ribbon => patch_ribbon(ir_text).map(|t| (t, "nyan ribbon".to_string())).map_err(ShaderError::Patch),
         // the banner (ribbon_banner: the width follows the board's axis as laid) on top of the flat patch
-        Patch::RibbonVs => ribbon_vs::patch(ir_text)
-            .and_then(|flat| ribbon_banner::patch_vs(&flat))
-            .map(|t| (t, "nyan banner".to_string()))
-            .map_err(ShaderError::Patch),
+        Patch::RibbonVs => {
+            ribbon_vs::patch(ir_text).and_then(|flat| ribbon_banner::patch_vs(&flat)).map(|t| (t, "nyan banner".to_string())).map_err(ShaderError::Patch)
+        }
     }
 }
 

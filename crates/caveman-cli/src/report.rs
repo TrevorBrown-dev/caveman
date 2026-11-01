@@ -13,10 +13,13 @@ pub struct Reporter {
     out: Box<dyn Write + Send>,
 }
 
-fn kind_name(kind: &Kind) -> &'static str {
+/// The kind's name in the JSON events and the text lines.
+pub fn kind_name(kind: &Kind) -> &'static str {
     match kind {
         Kind::Deck => "deck",
         Kind::Wheel => "wheel",
+        Kind::Grip => "grip",
+        Kind::Pattern => "pattern",
     }
 }
 
@@ -61,10 +64,7 @@ impl Reporter {
     /// A deck or wheel left out because of its name.
     pub fn warning(&mut self, kind: Kind, display: &str, path: &Path, message: &str) {
         let text = format!("  WARNING {display}: {message}");
-        self.say(
-            &text,
-            json!({"event": "warning", "kind": kind_name(&kind), "display": display, "source": path.display().to_string(), "message": message}),
-        );
+        self.say(&text, json!({"event": "warning", "kind": kind_name(&kind), "display": display, "source": path.display().to_string(), "message": message}));
     }
 
     /// A deck or wheel ready to build.

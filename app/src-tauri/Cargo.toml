@@ -1,7 +1,9 @@
 [package]
 name = "caveman-app"
 description = "Caveman: design, preview and build ReSkate decks"
-version = "0.1.0"
+version = "0.2.0"
+license.workspace = true
+repository.workspace = true
 edition = "2021"
 
 [lib]
@@ -21,3 +23,6 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 caveman-core = { path = "../../crates/caveman-core" }
 caveman-cli = { path = "../../crates/caveman-cli" }
+
+[lints]
+workspace = true

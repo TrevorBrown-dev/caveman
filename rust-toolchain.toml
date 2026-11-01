@@ -1,0 +1,5 @@
+# Stable Rust, whichever host target rustup has (Trevor builds with x86_64-pc-windows-gnu, CI with the runner's MSVC
+# toolchain; both work). rustfmt and clippy are what CI runs.
+[toolchain]
+channel = "stable"
+components = ["rustfmt", "clippy"]

@@ -27,12 +27,17 @@
       <small class="faint">The ReSkate folder (Skate.exe, ReSkateLauncher.exe, Mods).</small>
     </label>
     <label>
+      <span>Your name</span>
+      <input type="text" bind:value={draft.author} placeholder="Caveman" spellcheck="false" />
+      <small class="faint">The author in the built mods' manifest (the mod manager shows it); packs take their own owner name.</small>
+    </label>
+    <label>
       <span>Deck folder</span>
-      <input type="text" bind:value={draft.decks} placeholder={`${draft.game}\\Caveman Decks`} spellcheck="false" />
+      <input type="text" bind:value={draft.decks} placeholder={`${draft.game}\\Caveman\\Decks`} spellcheck="false" />
     </label>
     <label>
       <span>Wheel folder</span>
-      <input type="text" bind:value={draft.wheels} placeholder={`${draft.game}\\Caveman Wheels`} spellcheck="false" />
+      <input type="text" bind:value={draft.wheels} placeholder={`${draft.game}\\Caveman\\Wheels`} spellcheck="false" />
     </label>
     <details>
       <summary class="dim">Advanced</summary>
@@ -44,6 +49,11 @@
       <label>
         <span>Item cache</span>
         <input type="text" bind:value={draft.cache} placeholder="%LOCALAPPDATA%\Caveman\cache" spellcheck="false" />
+      </label>
+      <label>
+        <span>Trainer (Live panel)</span>
+        <input type="text" bind:value={draft.trainer} placeholder="caveman-trainer.exe beside the app" spellcheck="false" />
+        <small class="faint">The FX DLL's companion, caveman-trainer.exe. Leave empty for the one beside the app.</small>
       </label>
     </details>
     <div class="actions">

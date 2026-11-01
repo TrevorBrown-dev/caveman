@@ -32,10 +32,8 @@ fn guid_text_round_trip() {
 
 #[test]
 fn write_then_read_small_toc() {
-    let bundles = vec![
-        PatchBundle { name: "win32/a/B".into(), region: vec![1, 2, 3], load: 1 },
-        PatchBundle { name: "win32/c".into(), region: vec![9; 10], load: 1 },
-    ];
+    let bundles =
+        vec![PatchBundle { name: "win32/a/B".into(), region: vec![1, 2, 3], load: 1 }, PatchBundle { name: "win32/c".into(), region: vec![9; 10], load: 1 }];
     let chunks = vec![PatchChunk {
         guid: "a82b7e84-ed0f-54b3-eca0-250126b2aeca".parse().unwrap(),
         patch: true,

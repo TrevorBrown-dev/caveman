@@ -13,13 +13,17 @@
 //!   auras at higher strengths, and the sprite prototype (`SPRITE`): a burst of Caveman's own star sprites, through a
 //!   material key of its own (a texture, a depot entry, and alias rows in the global shader database and texture
 //!   lookup, as ReSkate Studio adds materials; `shaderstate.rs`).
+//! - **The Caveman** (`CAVEMAN`, "000 - The Caveman"): one plain white deck that the trainer turns into anything live.
+//!   Its graphic is a texture only it uses, which `caveman_fx.dll` rewrites on the GPU ([`board_art`] makes the bytes
+//!   exactly as the build would); its effects (`CAVE`) are a combo, each on a state of its own,
+//!   `Animation/Caveman/FX.Cave.<Name>` (`fx.cave.<name>`), off by default.
 
 use std::path::Path;
 use std::sync::Arc;
 
 use crate::build::{self, BuildError, BuildOptions, BuildReport, DeckLayers, DeckSpec, SHARED};
 use crate::ebx::{self, Document, Guid};
-use crate::effects::{self, AuraTuning, BoardPoints, EffectTuning, Layers, NyanTrigger, ResolvedBoard, StateTrigger, Usage, NYAN_STEPS};
+use crate::effects::{self, AuraTuning, BoardPoints, EffectTuning, FoilMode, Layers, NyanTrigger, ResolvedBoard, StateTrigger, Usage, NYAN_STEPS};
 use crate::game::{Game, ITEMS_TOC};
 use crate::image::Image;
 use crate::item_cache::{hash64, Op};
@@ -34,8 +38,28 @@ pub const STATE_PREFIX: &str = "Animation/Caveman/FX.";
 /// The fx states the mod carries: the default rules' (crates/caveman-fx/rules/default.json), `Test` for the trainer,
 /// and spare slots for rules written later without rebuilding the mod.
 pub const STATES: [&str; 22] = [
-    "Test", "Kickflip", "Heelflip", "Shuvit", "Flip", "Grind", "Grind.Start", "Manual", "Landed", "Trick.Any", "Air", "Powerslide", "Grab", "Wipeout",
-    "Slot1", "Slot2", "Slot3", "Slot4", "Slot5", "Slot6", "Slot7", "Slot8",
+    "Test",
+    "Kickflip",
+    "Heelflip",
+    "Shuvit",
+    "Flip",
+    "Grind",
+    "Grind.Start",
+    "Manual",
+    "Landed",
+    "Trick.Any",
+    "Air",
+    "Powerslide",
+    "Grab",
+    "Wipeout",
+    "Slot1",
+    "Slot2",
+    "Slot3",
+    "Slot4",
+    "Slot5",
+    "Slot6",
+    "Slot7",
+    "Slot8",
 ];
 /// The game's one-shot effects in the shared bundle (statefx.BURSTS).
 pub const IMPACT: &str = "effects/characters/effectblueprints/ebp_chr_ctd_impact_a";
@@ -82,18 +106,19 @@ pub struct TunedFx {
 }
 
 pub const TUNED: [TunedFx; 2] = [
-    // the crash test dummy's impact: three times the particles, four times their size, twice their life, three times
-    // as bright, the flash light four times as long and three times as wide
+    // the crash test dummy's impact: three times the particles, four times their size (up to 1.5 m: the flash sprites
+    // are already over a metre), twice their life, three times as bright, the flash light four times as long and three
+    // times as wide
     TunedFx {
         name: "impact_big",
         source: IMPACT,
-        tuning: EffectTuning { count: 3.0, size: 4.0, life: 2.0, brightness: 3.0, light_intensity: 1.0, light_radius: 3.0, light_life: 4.0 },
+        tuning: EffectTuning { count: 3.0, size: 4.0, max_size: 1.5, life: 2.0, brightness: 3.0, light_intensity: 1.0, light_radius: 3.0, light_life: 4.0 },
     },
     // the dynamite sparkler: twice the sparks, three times their size, half again their life, twice as bright
     TunedFx {
         name: "sparkler_big",
         source: SPARKLER,
-        tuning: EffectTuning { count: 2.0, size: 3.0, life: 1.5, brightness: 2.0, light_intensity: 3.0, light_radius: 1.0, light_life: 1.0 },
+        tuning: EffectTuning { count: 2.0, size: 3.0, max_size: 1.5, life: 1.5, brightness: 2.0, light_intensity: 3.0, light_radius: 1.0, light_life: 1.0 },
     },
 ];
 
@@ -101,8 +126,10 @@ pub const TUNED: [TunedFx; 2] = [
 pub const OWN_PREFIX: &str = "characters/vfx/caveman/fxlib/";
 
 /// The aura at four and at sixteen times the plain aura's light (and brighter, wider, longer trails).
-pub const AURA_X4: AuraTuning = AuraTuning { light_intensity: 160.0, light_radius: 1.5, trail_boost: 4.0, trail_dim: 0.75, trail_width: Some(2.0), trail_life: Some(0.3) };
-pub const AURA_X16: AuraTuning = AuraTuning { light_intensity: 640.0, light_radius: 2.5, trail_boost: 10.0, trail_dim: 2.0, trail_width: Some(3.0), trail_life: Some(0.5) };
+pub const AURA_X4: AuraTuning =
+    AuraTuning { light_intensity: 160.0, light_radius: 1.5, trail_boost: 4.0, trail_dim: 0.75, trail_width: Some(2.0), trail_life: Some(0.3) };
+pub const AURA_X16: AuraTuning =
+    AuraTuning { light_intensity: 640.0, light_radius: 2.5, trail_boost: 10.0, trail_dim: 2.0, trail_width: Some(3.0), trail_life: Some(0.5) };
 
 /// The sprite prototype: the crash test dummy impact's "bouncing bits" emitter (debris sprites from a 2 x 2 sheet,
 /// thrown out and falling with gravity), drawn with Caveman's own sheet of cartoon stars through a material key of its
@@ -152,14 +179,78 @@ pub struct FxDeck {
 }
 
 pub const DECKS: [FxDeck; 8] = [
-    FxDeck { name: "FX Test Aura", state: "Test", look: FxLook::Aura([255, 255, 255]), usage: Usage::Continuous, cooldown: 0.0, label: ["TEST", "WHITE AURA", "BY HAND"], colour: [90, 90, 110] },
-    FxDeck { name: "FX Kickflip Burst", state: "Kickflip", look: FxLook::Burst(IMPACT), usage: Usage::OneOff, cooldown: 0.3, label: ["KICKFLIP", "BURST", "ONE SHOT"], colour: [230, 60, 40] },
-    FxDeck { name: "FX Flip Aura", state: "Flip", look: FxLook::Aura([40, 255, 40]), usage: Usage::Continuous, cooldown: 0.0, label: ["ANY FLIP", "GREEN AURA", "WHILE FLIPPING"], colour: [30, 160, 50] },
-    FxDeck { name: "FX Grind Nyan", state: "Grind", look: FxLook::Nyan, usage: Usage::Continuous, cooldown: 0.0, label: ["GRIND", "RAINBOW", "WHILE GRINDING"], colour: [200, 40, 200] },
-    FxDeck { name: "FX Grind Start Burst", state: "Grind.Start", look: FxLook::Burst(IMPACT), usage: Usage::OneOff, cooldown: 0.3, label: ["GRIND ON", "BURST", "ONE SHOT"], colour: [240, 140, 0] },
-    FxDeck { name: "FX Manual Aura", state: "Manual", look: FxLook::Aura([0, 255, 255]), usage: Usage::Continuous, cooldown: 0.0, label: ["MANUAL", "CYAN AURA", "WHILE MANUAL"], colour: [0, 150, 170] },
-    FxDeck { name: "FX Landed Burst", state: "Landed", look: FxLook::Burst(DUST), usage: Usage::OneOff, cooldown: 0.3, label: ["LANDED", "DUST BURST", "ONE SHOT"], colour: [140, 110, 80] },
-    FxDeck { name: "FX Air Aura", state: "Air", look: FxLook::Aura([255, 220, 0]), usage: Usage::Continuous, cooldown: 0.0, label: ["AIR", "YELLOW AURA", "IN THE AIR"], colour: [200, 170, 0] },
+    FxDeck {
+        name: "FX Test Aura",
+        state: "Test",
+        look: FxLook::Aura([255, 255, 255]),
+        usage: Usage::Continuous,
+        cooldown: 0.0,
+        label: ["TEST", "WHITE AURA", "BY HAND"],
+        colour: [90, 90, 110],
+    },
+    FxDeck {
+        name: "FX Kickflip Burst",
+        state: "Kickflip",
+        look: FxLook::Burst(IMPACT),
+        usage: Usage::OneOff,
+        cooldown: 0.3,
+        label: ["KICKFLIP", "BURST", "ONE SHOT"],
+        colour: [230, 60, 40],
+    },
+    FxDeck {
+        name: "FX Flip Aura",
+        state: "Flip",
+        look: FxLook::Aura([40, 255, 40]),
+        usage: Usage::Continuous,
+        cooldown: 0.0,
+        label: ["ANY FLIP", "GREEN AURA", "WHILE FLIPPING"],
+        colour: [30, 160, 50],
+    },
+    FxDeck {
+        name: "FX Grind Nyan",
+        state: "Grind",
+        look: FxLook::Nyan,
+        usage: Usage::Continuous,
+        cooldown: 0.0,
+        label: ["GRIND", "RAINBOW", "WHILE GRINDING"],
+        colour: [200, 40, 200],
+    },
+    FxDeck {
+        name: "FX Grind Start Burst",
+        state: "Grind.Start",
+        look: FxLook::Burst(IMPACT),
+        usage: Usage::OneOff,
+        cooldown: 0.3,
+        label: ["GRIND ON", "BURST", "ONE SHOT"],
+        colour: [240, 140, 0],
+    },
+    FxDeck {
+        name: "FX Manual Aura",
+        state: "Manual",
+        look: FxLook::Aura([0, 255, 255]),
+        usage: Usage::Continuous,
+        cooldown: 0.0,
+        label: ["MANUAL", "CYAN AURA", "WHILE MANUAL"],
+        colour: [0, 150, 170],
+    },
+    FxDeck {
+        name: "FX Landed Burst",
+        state: "Landed",
+        look: FxLook::Burst(DUST),
+        usage: Usage::OneOff,
+        cooldown: 0.3,
+        label: ["LANDED", "DUST BURST", "ONE SHOT"],
+        colour: [140, 110, 80],
+    },
+    FxDeck {
+        name: "FX Air Aura",
+        state: "Air",
+        look: FxLook::Aura([255, 220, 0]),
+        usage: Usage::Continuous,
+        cooldown: 0.0,
+        label: ["AIR", "YELLOW AURA", "IN THE AIR"],
+        colour: [200, 170, 0],
+    },
 ];
 
 /// One effect of a combo deck: its look, the fx state it fires on and how it plays.
@@ -196,6 +287,155 @@ pub const COMBOS: [FxCombo; 1] = [FxCombo {
     colour: [120, 40, 200],
 }];
 
+// ---------------------------------------------------------------- The Caveman: one board, customised live
+
+/// The Caveman (docs/fx-hook-plan.md, "The Caveman"): a plain white deck, listed after the prefix as "The Caveman",
+/// whose graphic `caveman_fx.dll` rewrites on the GPU (only this deck's own texture) and whose effects, each on an fx
+/// state of its own (`Animation/Caveman/FX.Cave.<Name>`, off by default), the trainer switches on and off.
+pub const CAVEMAN: &str = "The Caveman";
+/// Its colour: plain white all over (its art, so its menu thumbnail too).
+pub const CAVE_COLOUR: [u8; 3] = [255, 255, 255];
+
+/// One of The Caveman's effects: the trainer's name for it (`board fx <name> on`), its fx state, the look, how it
+/// plays, and a line saying what it is.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct CaveFx {
+    pub name: &'static str,
+    pub state: &'static str,
+    pub look: FxLook,
+    pub usage: Usage,
+    pub cooldown: f64,
+    pub what: &'static str,
+}
+
+/// The Caveman's effects, from what worked in game (knowledge/effects-catalog.md, "In game"): each fires on its own fx
+/// state `fx.cave.<name>`. One-shots fire once per cooldown while their state is on (a pulse fires one).
+pub const CAVE: [CaveFx; 11] = [
+    CaveFx {
+        name: "aura",
+        state: "Cave.Aura",
+        look: FxLook::AuraTuned([0, 255, 255], AURA_X4),
+        usage: Usage::Continuous,
+        cooldown: 0.0,
+        what: "cyan aura at x4, both trucks",
+    },
+    CaveFx {
+        name: "nyan",
+        state: "Cave.Nyan",
+        look: FxLook::Nyan,
+        usage: Usage::Continuous,
+        cooldown: 0.0,
+        what: "the rainbow trail (its colours need Caveman-Shaders)",
+    },
+    CaveFx {
+        name: "impact",
+        state: "Cave.Impact",
+        look: FxLook::Own("impact_big", BoardPoints::Centre),
+        usage: Usage::OneOff,
+        cooldown: 1.0,
+        what: "Impact Big: sparks, debris and a flash (one-shot)",
+    },
+    CaveFx {
+        name: "sparkler",
+        state: "Cave.Sparkler",
+        look: FxLook::Stock(SPARKLER, BoardPoints::Wheels),
+        usage: Usage::Continuous,
+        cooldown: 0.0,
+        what: "the dynamite sparkler at the four wheels",
+    },
+    CaveFx {
+        name: "fire",
+        state: "Cave.Fire",
+        look: FxLook::Stock(FIRE_HEAD, BoardPoints::Centre),
+        usage: Usage::Continuous,
+        cooldown: 0.0,
+        what: "the Stunt Rider's head fire, centre",
+    },
+    CaveFx {
+        name: "flametrail",
+        state: "Cave.FlameTrail",
+        look: FxLook::Stock(FLAME_TRAIL, BoardPoints::Centre),
+        usage: Usage::Continuous,
+        cooldown: 0.0,
+        what: "the Reaper's flame trail (needs speed)",
+    },
+    CaveFx {
+        name: "ghost",
+        state: "Cave.Ghost",
+        look: FxLook::Stock(GHOST_TRAILS, BoardPoints::NoseTail),
+        usage: Usage::Continuous,
+        cooldown: 0.0,
+        what: "blue ghost trails, nose and tail",
+    },
+    CaveFx {
+        name: "smoke",
+        state: "Cave.Smoke",
+        look: FxLook::Stock(SMOKE_PUFF, BoardPoints::Ground),
+        usage: Usage::OneOff,
+        cooldown: 1.0,
+        what: "Dem Bones' smoke puff on the ground (one-shot)",
+    },
+    CaveFx {
+        name: "splash",
+        state: "Cave.Splash",
+        look: FxLook::Stock(SPLASH, BoardPoints::Ground),
+        usage: Usage::OneOff,
+        cooldown: 1.5,
+        what: "the big water splash and ripple (one-shot)",
+    },
+    CaveFx {
+        name: "skull",
+        state: "Cave.Skull",
+        look: FxLook::Stock(SKULL, BoardPoints::Centre),
+        usage: Usage::OneOff,
+        cooldown: 3.0,
+        what: "Dem Bones' falling skull (one-shot)",
+    },
+    CaveFx {
+        name: "dust",
+        state: "Cave.Dust",
+        look: FxLook::Stock(DUST, BoardPoints::Ground),
+        usage: Usage::OneOff,
+        cooldown: 1.0,
+        what: "the impact dust cloud (one-shot)",
+    },
+];
+
+/// The Caveman's display name with the decks' prefix: "000 - The Caveman".
+pub fn cave_display(prefix: &str) -> String {
+    format!("{prefix}{CAVEMAN}")
+}
+
+/// The Caveman's graphic texture as the game names it (the art slot of its deck): what `caveman_fx.dll` looks for
+/// (`board::TEXTURE_NAME`, for the default prefix "000 - ").
+pub fn cave_texture_name(prefix: &str) -> String {
+    format!("{}{}_role3_{}", build::PREFIX, build::base_name(&deck_key(&cave_display(prefix))), build::SLOT_ART)
+}
+
+/// The Caveman's art: plain white, 512 x 2048 RGB.
+pub fn cave_art() -> Image {
+    Image::filled(512, 2048, &CAVE_COLOUR)
+}
+
+/// A deck graphic's texture data as the build writes it into a mod (the art slot): the full mip chain of the RGB art,
+/// each level resized from the art (Lanczos), BC7-encoded, the levels one after another (12 for 512 x 2048).
+pub fn board_mips(art: &Image) -> Vec<u8> {
+    build::mip_chain(&art.to_rgb(), build::DECK_LEVELS, false, crate::bc7::encode)
+}
+
+/// The Caveman's own texture data (plain white): `board reset` puts these bytes back, the same the mod holds.
+pub fn cave_mips() -> Vec<u8> {
+    board_mips(&cave_art())
+}
+
+/// Any image as The Caveman's graphic, fitted as Caveman fits deck art (`build::fit_art_on`: turned upright,
+/// cover-cropped to 1:4, resized, `paint` or `wood` behind transparent parts) and made into the texture data the
+/// build would write for it ([`board_mips`]). Returns the data and what fitting did.
+pub fn board_art(img: &Image, wood: &Image, paint: Option<[u8; 3]>) -> Result<(Vec<u8>, Vec<String>), BuildError> {
+    let (art, notes) = build::fit_art_on(img, wood, paint)?;
+    Ok((board_mips(&art), notes))
+}
+
 /// The fx state every library deck fires on: the trainer's `fire fx.test <ms>` plays the equipped one.
 pub const LIBRARY_STATE: &str = "Test";
 
@@ -212,7 +452,14 @@ pub const LIBRARY: [FxDeck; 24] = [
     lib("FXL Fire Shoulder", FxLook::Stock(FIRE_SHOULDER, BoardPoints::Trucks), Usage::Continuous, 0.0, ["FIRE SMALL", "LOOP", "AT THE TRUCKS"], [200, 80, 10]),
     lib("FXL Flame Trail", FxLook::Stock(FLAME_TRAIL, BoardPoints::Centre), Usage::Continuous, 0.0, ["FLAME TRAIL", "LOOP", "REAPER"], [180, 60, 0]),
     lib("FXL Dark Wisps", FxLook::Stock(DARK_WISPS, BoardPoints::Wheels), Usage::Continuous, 0.0, ["DARK WISPS", "LOOP", "AT THE WHEELS"], [50, 40, 70]),
-    lib("FXL Ghost Trails", FxLook::Stock(GHOST_TRAILS, BoardPoints::NoseTail), Usage::Continuous, 0.0, ["GHOST TRAILS", "LOOP", "NOSE AND TAIL"], [120, 170, 200]),
+    lib(
+        "FXL Ghost Trails",
+        FxLook::Stock(GHOST_TRAILS, BoardPoints::NoseTail),
+        Usage::Continuous,
+        0.0,
+        ["GHOST TRAILS", "LOOP", "NOSE AND TAIL"],
+        [120, 170, 200],
+    ),
     lib("FXL Reaper Mist", FxLook::Stock(HOOD_MIST, BoardPoints::Centre), Usage::Continuous, 0.0, ["MIST", "LOOP", "REAPER HOOD"], [70, 90, 110]),
     lib("FXL Scythe Fire", FxLook::Stock(SCYTHE_FIRE, BoardPoints::Centre), Usage::Continuous, 0.0, ["GEO FLAME", "LOOP", "REAPER SCYTHE"], [150, 30, 120]),
     lib("FXL Oni Eyes", FxLook::Stock(ONI_EYES, BoardPoints::NoseTail), Usage::Continuous, 0.0, ["EYE GLOW", "LOOP", "NOSE AND TAIL"], [140, 40, 220]),
@@ -429,7 +676,8 @@ pub fn star_sheet(side: usize) -> Image {
     };
     // y grows downwards in the image: the arrow's tip at the top (y -0.9)
     let arrow: Vec<(f64, f64)> = vec![(0.0, -0.9), (0.75, -0.05), (0.3, -0.05), (0.3, 0.85), (-0.3, 0.85), (-0.3, -0.05), (-0.75, -0.05)];
-    let shapes: [(Vec<(f64, f64)>, [u8; 3]); 4] =
+    type Shape = (Vec<(f64, f64)>, [u8; 3]);
+    let shapes: [Shape; 4] =
         [(star(5, 0.92, 0.42), [255, 220, 30]), (star(5, 0.92, 0.42), [255, 110, 20]), (arrow, [40, 230, 255]), (star(5, 0.92, 0.42), [255, 70, 200])];
     let outline = [20u8, 12, 30];
     let border = 0.09; // the outline's width, in cell units (the cell spans -1..1)
@@ -507,12 +755,18 @@ pub fn sprite_pieces(game: &Game, shared: &crate::game::Bundle, mod_name: &str) 
     };
     let shared_rids: std::collections::HashSet<u64> = shared.manifest.res.iter().map(|r| r.rid).collect();
     // the texture
-    let (mut ops, tex, texture_rid, chunk) = build::mod_texture(game, SHARED, SPRITE.template, SPRITE.texture, &star_sheet(1024), mod_name)?;
+    let build::ModTexture { mut ops, reference: tex, rid: texture_rid, chunk } =
+        build::mod_texture(game, SHARED, SPRITE.template, SPRITE.texture, &star_sheet(1024), mod_name)?;
     if shared_rids.contains(&texture_rid) || game.chunk(&chunk, ITEMS_TOC)?.is_some() || shared.manifest.chunks.iter().any(|c| c.guid == chunk) {
         return Err(BuildError(format!("{}: its resource id or chunk is already the game's", SPRITE.texture)));
     }
     // the source key's block, its texture swapped
-    let di = shared.manifest.res.iter().position(|r| r.rtype == shaderstate::DEPOT_TYPE).ok_or_else(|| BuildError("the shared bundle has no shader block depot".into()))?;
+    let di = shared
+        .manifest
+        .res
+        .iter()
+        .position(|r| r.rtype == shaderstate::DEPOT_TYPE)
+        .ok_or_else(|| BuildError("the shared bundle has no shader block depot".into()))?;
     let depot_res = &shared.manifest.res[di];
     let depot = shaderstate::read_depot(&game.decode(&shared.files[shared.manifest.res_file(di)])?, &depot_res.meta).map_err(|e| BuildError(e.0))?;
     let list = depot
@@ -577,7 +831,10 @@ pub fn sprite_pieces(game: &Game, shared: &crate::game::Bundle, mod_name: &str) 
     if kept != 2 || effects::replace_material_key(&mut bp, SPRITE.source_key, key)? != 1 {
         return Err(BuildError(format!("{}: expected one bouncing-bits emitter and one light", SPRITE.source)));
     }
-    effects::retune_blueprint(&mut bp, &EffectTuning { count: 2.5, size: 5.0, life: 1.0, brightness: 1.0, light_intensity: 1.0, light_radius: 2.0, light_life: 3.0 })?;
+    effects::retune_blueprint(
+        &mut bp,
+        &EffectTuning { count: 2.5, size: 5.0, max_size: 0.0, life: 1.0, brightness: 1.0, light_intensity: 1.0, light_radius: 2.0, light_life: 3.0 },
+    )?;
     if effects::set_emitter_param(&mut bp, SPRITE_SPEED, &[4.0, 10.0])? != 1 {
         return Err(BuildError("the bouncing-bits emitter has no speed range".into()));
     }
@@ -606,7 +863,26 @@ pub struct FxBuild {
     pub report: BuildReport,
     pub states: Vec<(String, (Guid, Guid))>,
     pub own: Vec<(String, String, (Guid, Guid))>,
-    pub sprite_key: i64,
+    /// None when built without the sprite prototype.
+    pub sprite_key: Option<i64>,
+}
+
+/// What goes into the FX mod besides the fx states, the test decks and the stock library decks.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct FxModOptions {
+    /// The sprite prototype (FXL Star Burst): its texture and depot in the shared bundle and its rows in the global
+    /// shader database and texture lookup (the mod then carries a `globals.toc` patch). Off, the mod is items.toc only:
+    /// the fallback should the prototype misbehave in game. Only with `test_decks` (the prototype is a library deck).
+    pub sprites: bool,
+    /// The particle effect test decks (`DECKS`, `COMBOS`, the FX Library): parked since 2026-10-30 (Trevor: the
+    /// effect tooling is not ready for players), so the default mod is the fx states and The Caveman alone.
+    pub test_decks: bool,
+}
+
+impl Default for FxModOptions {
+    fn default() -> FxModOptions {
+        FxModOptions { sprites: true, test_decks: false }
+    }
 }
 
 /// The item key of a test deck.
@@ -614,9 +890,21 @@ pub fn deck_key(display: &str) -> String {
     format!("Own_{}", display.replace(' ', "_"))
 }
 
-/// Builds the Caveman-FX mod into `mods_dir/mod_name`: the fx states and the test decks (`prefix` goes before each
-/// deck's name). Every template comes from the player's own game.
+/// Builds the Caveman-FX mod into `mods_dir/mod_name`: the fx states, the test, combo and library decks (`prefix` goes
+/// before each deck's name), with the sprite prototype. Every template comes from the player's own game.
 pub fn build_fx_mod(game: Arc<Game>, mods_dir: &Path, mod_name: &str, prefix: &str, log: &mut dyn FnMut(&str)) -> Result<FxBuild, BuildError> {
+    build_fx_mod_with(game, mods_dir, mod_name, prefix, &FxModOptions::default(), log)
+}
+
+/// [`build_fx_mod`] with options (the sprite prototype can be left out).
+pub fn build_fx_mod_with(
+    game: Arc<Game>,
+    mods_dir: &Path,
+    mod_name: &str,
+    prefix: &str,
+    o: &FxModOptions,
+    log: &mut dyn FnMut(&str),
+) -> Result<FxBuild, BuildError> {
     let shared = game.bundle(SHARED, ITEMS_TOC)?;
     let ebx_of = |name: &str| -> Result<Vec<u8>, BuildError> {
         let i = shared.manifest.ebx_index(name).ok_or_else(|| BuildError(format!("the shared bundle has no {name}")))?;
@@ -625,7 +913,8 @@ pub fn build_fx_mod(game: Arc<Game>, mods_dir: &Path, mod_name: &str, prefix: &s
     let template = ebx_of(STATE_TEMPLATE)?;
     let mut extra = Vec::new();
     let mut states = Vec::new();
-    for short in STATES {
+    // the test decks' states, then The Caveman's (after them: the first ones are as they always were)
+    for short in STATES.iter().copied().chain(CAVE.iter().map(|c| c.state)) {
         let (name, bytes) = state_asset(&template, short)?;
         if shared.manifest.ebx_index(&name).is_some() {
             return Err(BuildError(format!("the game already has {name}")));
@@ -641,18 +930,22 @@ pub fn build_fx_mod(game: Arc<Game>, mods_dir: &Path, mod_name: &str, prefix: &s
         own.push((t.name.to_string(), name.clone(), doc.reference()));
         extra.push((SHARED.to_string(), name, ebx::write_document_with(&doc, false, false)?));
     }
-    let sprite = sprite_pieces(&game, &shared, mod_name)?;
-    log(&format!(
-        "  sprite prototype: material key {} aliasing {} (records {:?}, texture set {:#x}), texture {}, depot {}",
-        sprite.key,
-        SPRITE.source_key,
-        sprite.records,
-        sprite.texture_set,
-        SPRITE.texture,
-        sprite_depot_name(sprite.key)
-    ));
-    own.push((SPRITE.name.to_string(), sprite.blueprint.0.clone(), sprite.reference));
-    extra.push((SHARED.to_string(), sprite.blueprint.0.clone(), sprite.blueprint.1.clone()));
+    let sprite = if o.sprites && o.test_decks { Some(sprite_pieces(&game, &shared, mod_name)?) } else { None };
+    if let Some(sprite) = &sprite {
+        log(&format!(
+            "  sprite prototype: material key {} aliasing {} (records {:?}, texture set {:#x}), texture {}, depot {}",
+            sprite.key,
+            SPRITE.source_key,
+            sprite.records,
+            sprite.texture_set,
+            SPRITE.texture,
+            sprite_depot_name(sprite.key)
+        ));
+        own.push((SPRITE.name.to_string(), sprite.blueprint.0.clone(), sprite.reference));
+        extra.push((SHARED.to_string(), sprite.blueprint.0.clone(), sprite.blueprint.1.clone()));
+    } else {
+        log("  without the sprite prototype");
+    }
     let own_ref = |short: &str| -> Result<(Guid, Guid), BuildError> {
         own.iter().find(|(s, _, _)| s == short).map(|(_, _, r)| *r).ok_or_else(|| BuildError(format!("no blueprint of the mod's own named {short}")))
     };
@@ -667,13 +960,16 @@ pub fn build_fx_mod(game: Arc<Game>, mods_dir: &Path, mod_name: &str, prefix: &s
         })
     };
     let mut decks = Vec::new();
-    for d in DECKS {
+    let test_decks: &[FxDeck] = if o.test_decks { &DECKS } else { &[] };
+    let combos: &[FxCombo] = if o.test_decks { &COMBOS } else { &[] };
+    let library: &[FxDeck] = if o.test_decks { &LIBRARY } else { &[] };
+    for d in test_decks.iter().copied() {
         let trigger = StateTrigger { state: state_ref(d.state), usage: d.usage, cooldown: d.cooldown };
         let layers = Layers { board: Some(resolve(d.look)?), trigger: Some(trigger), ..Layers::default() };
         let display = format!("{prefix}{}", d.name);
         decks.push(DeckSpec::new(display.clone(), deck_key(&display), deck_art(&d), DeckLayers::Layers(layers)));
     }
-    for c in COMBOS {
+    for c in combos.iter().copied() {
         let mut combo = Vec::new();
         for p in c.parts {
             combo.push((resolve(p.look)?, StateTrigger { state: state_ref(p.state), usage: p.usage, cooldown: p.cooldown }));
@@ -681,19 +977,50 @@ pub fn build_fx_mod(game: Arc<Game>, mods_dir: &Path, mod_name: &str, prefix: &s
         let layers = Layers { combo, ..Layers::default() };
         let display = format!("{prefix}{}", c.name);
         // the art of a deck that names its effects (the fx state line reads FX.COMBO)
-        let art = deck_art(&FxDeck { name: c.name, state: "Combo", look: FxLook::Nyan, usage: Usage::Continuous, cooldown: 0.0, label: c.label, colour: c.colour });
+        let art =
+            deck_art(&FxDeck { name: c.name, state: "Combo", look: FxLook::Nyan, usage: Usage::Continuous, cooldown: 0.0, label: c.label, colour: c.colour });
         decks.push(DeckSpec::new(display.clone(), deck_key(&display), art, DeckLayers::Layers(layers)));
     }
     // the library, after the test and combo decks (theirs stay exactly as they were)
-    for d in LIBRARY {
+    for d in library.iter().copied() {
+        if !o.sprites && matches!(d.look, FxLook::Own(short, _) if short == SPRITE.name) {
+            continue;
+        }
         let trigger = StateTrigger { state: state_ref(d.state), usage: d.usage, cooldown: d.cooldown };
         let layers = Layers { board: Some(resolve(d.look)?), trigger: Some(trigger), ..Layers::default() };
         let display = format!("{prefix}{}", d.name);
         decks.push(DeckSpec::new(display.clone(), deck_key(&display), deck_art(&d), DeckLayers::Layers(layers)));
     }
-    let opts = BuildOptions { item_cache: false, extra_ebx: extra, extra_ops: sprite.ops, config_res: sprite.config_res, ..BuildOptions::default() };
-    let report = build::build(game, &decks, &[], mods_dir, mod_name, &opts, log)?;
-    Ok(FxBuild { report, states, own, sprite_key: sprite.key })
+    // The Caveman, last: plain white art, every effect of CAVE on its own fx.cave.* state. Since 2026-10-22 it is
+    // built on the HOLO host with its own mask, normal map and holo map (the game's default mask and normal map,
+    // and a black holo map: no holo), so that every slot the deck shader samples is a texture only it uses and the
+    // trainer can turn its finish into anything live (gloss, matte, foil, chrome, glitter, holo, emboss, the shader
+    // marker). The holo host's preset carries param_graphic_metalmaskvalue 1.0 (as the metal host's does: the preset
+    // dump of 2026-10-22, key a2189044-...) and the holo parameters (iridescence 0.25, the Pearl pattern), so metal
+    // finishes and holo foil both work on it; the pattern is fixed at build (Pearl).
+    let mut combo = Vec::new();
+    for c in CAVE {
+        combo.push((resolve(c.look)?, StateTrigger { state: state_ref(c.state), usage: c.usage, cooldown: c.cooldown }));
+    }
+    let display = cave_display(prefix);
+    let (osk, ny) = build::default_layers(&game)?;
+    // (black: no holo; a holo finish writes red live, see effects::HOLO_IDLE_RED)
+    let rgb = effects::holo_idle();
+    // the iridescence amount at 1.0 (the strong stock holo decks'; the host's 0.25 is faint): the holo map's red,
+    // written live, scales it from 0 to the full amount
+    let preset_floats = vec![(build::PARAM_IRIDESCENCE_AMOUNT.to_string(), 1.0)];
+    let layers = Layers { osk: Some(osk), ny: Some(ny), rgb: Some(rgb), foilmode: Some(FoilMode::Pearl), combo, preset_floats, ..Layers::default() };
+    decks.push(DeckSpec::new(display.clone(), deck_key(&display), cave_art(), DeckLayers::Layers(layers)));
+    log(&format!(
+        "  {display}: plain white on the holo host with its own mask, normal map and holo map (black: no holo), {} effects on fx.cave.* ({})",
+        CAVE.len(),
+        CAVE.iter().map(|c| c.name).collect::<Vec<_>>().join(", ")
+    ));
+    let sprite_key = sprite.as_ref().map(|s| s.key);
+    let (extra_ops, config_res) = sprite.map(|s| (s.ops, s.config_res)).unwrap_or_default();
+    let opts = BuildOptions { item_cache: false, extra_ebx: extra, extra_ops, config_res, ..BuildOptions::default() };
+    let report = build::build(game, &decks, &[], &[], &[], mods_dir, mod_name, &opts, log)?;
+    Ok(FxBuild { report, states, own, sprite_key })
 }
 
 #[cfg(test)]
@@ -749,6 +1076,44 @@ mod tests {
         assert!((10..=20).contains(&stock), "{stock} stock effects");
         assert_ne!(own_guid("a", "file"), own_guid("b", "file"));
         assert_eq!(own_guid("a", "file"), own_guid("a", "file"));
+    }
+
+    #[test]
+    fn the_caveman() {
+        let mut names = std::collections::HashSet::new();
+        let mut states = std::collections::HashSet::new();
+        for c in CAVE {
+            assert!(names.insert(c.name) && c.name.chars().all(|ch| ch.is_ascii_lowercase()), "{}: a unique lower-case name", c.name);
+            assert!(states.insert(c.state.to_ascii_lowercase()), "{}: its own state", c.name);
+            assert_eq!(
+                crate::fxmod::state_name(c.state).to_ascii_lowercase(),
+                format!("animation/caveman/fx.cave.{}", c.name),
+                "fx.cave.<name> is the trainer's name"
+            );
+            assert!(!STATES.contains(&c.state), "{}: not one of the test decks' states", c.name);
+            assert!(c.usage == Usage::Continuous || c.cooldown > 0.15, "{}: a one-shot needs a cooldown above the pulse", c.name);
+            if let FxLook::Own(short, _) = c.look {
+                assert!(TUNED.iter().any(|t| t.name == short), "{}: no blueprint {short}", c.name);
+            }
+            assert_ne!(state_ref(c.state), state_ref("Test"));
+        }
+        // its own key, apart from every other deck
+        let key = deck_key(&cave_display("000 - ")).to_lowercase();
+        for d in DECKS.iter().chain(LIBRARY.iter()) {
+            assert_ne!(deck_key(&format!("000 - {}", d.name)).to_lowercase(), key);
+        }
+        assert_eq!(
+            cave_texture_name("000 - "),
+            "characters/customization/reskate/board_bottomart/000_-_the_caveman_role3_2259d419-387f-b1ba-30fc-c5140100b012"
+        );
+        // plain white, and the texture data the build writes: 12 BC7 levels of 512 x 2048
+        let art = cave_art();
+        assert_eq!((art.width, art.height, art.channels), (512, 2048, 3));
+        assert!(art.data.iter().all(|&b| b == 255));
+        let want: usize = crate::texture::mip_sizes(512, 2048, 12, 16).iter().sum();
+        let mips = cave_mips();
+        assert_eq!(mips.len(), want);
+        assert_eq!(mips, build::mip_chain(&art, build::DECK_LEVELS, false, crate::bc7::encode));
     }
 
     #[test]

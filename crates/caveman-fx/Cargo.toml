@@ -3,6 +3,8 @@ name = "caveman-fx"
 description = "caveman_fx.dll: Caveman FX's native side, loaded into skate. (fx states from the skater's tricks, for FX decks; the DLL's own overlay drawing)"
 edition.workspace = true
 version.workspace = true
+license.workspace = true
+repository.workspace = true
 
 [lib]
 name = "caveman_fx"
@@ -30,3 +32,6 @@ features = [
     "Win32_System_LibraryLoader",
     "Win32_UI_WindowsAndMessaging",
 ]
+
+[lints]
+workspace = true

@@ -34,6 +34,26 @@ fn main() {
         }
         return;
     }
+    if args.first().map(|a| a == "pack").unwrap_or(false) {
+        use caveman_cli::pack::{parse_pack_args, run_pack, PACK_USAGE};
+        let o = match parse_pack_args(&args[1..]) {
+            Ok(Some(o)) => o,
+            Ok(None) => {
+                println!("{PACK_USAGE}");
+                return;
+            }
+            Err(e) => {
+                eprintln!("caveman pack: {e}\n{PACK_USAGE}");
+                std::process::exit(2);
+            }
+        };
+        let mut report = if o.json { Reporter::json() } else { Reporter::text() };
+        if let Err(e) = run_pack(&o, &mut report) {
+            report.say(&format!("caveman pack: {e}"), serde_json::json!({"event": "error", "message": e.to_string()}));
+            std::process::exit(1);
+        }
+        return;
+    }
     if args.first().map(|a| a == "import").unwrap_or(false) {
         let a = match parse_import_args(&args[1..]) {
             Ok(Some(a)) => a,

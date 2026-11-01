@@ -1,8 +1,10 @@
 [package]
 name = "caveman-trainer"
-description = "caveman-trainer: injects caveman_fx.dll into skate. and drives it (status, watch, fire, rules, unload)"
+description = "caveman-trainer: injects caveman_fx.dll into skate. and drives it (status, watch, fire, rules, unload, The Caveman board)"
 edition.workspace = true
 version.workspace = true
+license.workspace = true
+repository.workspace = true
 
 [[bin]]
 name = "caveman-trainer"
@@ -10,4 +12,11 @@ path = "src/main.rs"
 
 [dependencies]
 caveman-fx = { path = "../caveman-fx" }
+# The Caveman: art fitted and BC7-encoded exactly as a deck build does (fxmod::board_art), a deck file's colour as the
+# caveman CLI reads it (names::deck_paint)
+caveman-core = { path = "../caveman-core" }
+caveman-cli = { path = "../caveman-cli" }
 serde_json = "1"
+
+[lints]
+workspace = true

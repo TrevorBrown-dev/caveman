@@ -44,11 +44,7 @@ fn programs_match_python() {
         assert!(ir_text == py_ir, "{guid}: disassembly differs at {:?}", first_difference(ir_text.as_bytes(), py_ir.as_bytes()));
         let (patched, notes) = shader::patch_ir(which, &py_ir).expect("patch");
         let py_patched = String::from_utf8(read(&dir.join("patched.ll"))).unwrap();
-        assert!(
-            patched == py_patched,
-            "{guid}: patched IR differs at {:?}",
-            first_difference(patched.as_bytes(), py_patched.as_bytes())
-        );
+        assert!(patched == py_patched, "{guid}: patched IR differs at {:?}", first_difference(patched.as_bytes(), py_patched.as_bytes()));
         assert_eq!(notes, String::from_utf8(read(&dir.join("notes.txt"))).unwrap(), "{guid}: notes");
         let out = dxc.assemble(&patched, true).expect("assemble");
         assert!(out.ok, "{guid}: {}", out.messages);
@@ -131,12 +127,9 @@ fn shader_mod_matches_python() {
     let out = std::env::temp_dir().join(format!("caveman-shader-mod-test-{}", std::process::id()));
     let game = Game::open(&game_root()).expect("the game");
     let started = Instant::now();
-    let stats = shader::build_shader_mod(
-        &game,
-        &out,
-        &shader::ShaderModOptions { title: "Caveman Shaders (test)".into(), built: Some(built), animated: false },
-    )
-    .expect("build");
+    let stats =
+        shader::build_shader_mod(&game, &out, &shader::ShaderModOptions { title: "Caveman Shaders (test)".into(), built: Some(built), animated: false })
+            .expect("build");
     let seconds = started.elapsed().as_secs_f64();
     let (ours, theirs) = (tree(&out), tree(&py));
     assert_eq!(ours, theirs, "the same files");

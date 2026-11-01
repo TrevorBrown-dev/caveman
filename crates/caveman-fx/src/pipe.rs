@@ -15,7 +15,8 @@ const POLL_MS: u32 = 100;
 /// A client that sends nothing for this long is dropped.
 const IDLE_MS: u64 = 60_000;
 /// The longest request line accepted.
-const MAX_LINE: usize = 4 << 20;
+// (an RGBA8 chain of the board's art is 5.6 MB, 7.5 MB as base64 in one request line)
+const MAX_LINE: usize = 64 << 20;
 
 struct Overlapped {
     ov: win::OVERLAPPED,

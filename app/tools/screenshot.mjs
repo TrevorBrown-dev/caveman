@@ -5,7 +5,8 @@
 //   e.g. node tools/screenshot.mjs shots showcase=http://localhost:5173/ ride=http://localhost:5173/?mode=ride
 //   A script after ` :: ` runs once the preview is ready (to click something), and the shot is taken 3 s later.
 //   An empty URL keeps the current page. With ATTACH=<port> it uses a running browser's DevTools port instead of
-//   starting Chrome, e.g. the Tauri app started with WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=<port>.
+//   starting Chrome, e.g. the Tauri app started with CAVEMAN_DEVTOOLS_PORT=<port> (WebView2's own
+//   WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS does not reach it).
 //   SHOT_DEADLINE_MS (default 100000) bounds the whole run, shorter than a 120 s tool timeout.
 //
 // Chrome must never outlive this script (2026-10-21: orphans left by an earlier version rendered WebGL in software

@@ -54,8 +54,11 @@ fn u64_at(b: &[u8], at: usize) -> Result<u64> {
 
 // ---------------------------------------------------------------- the program lookup
 
-/// The program lookup of a shader database: (where the lookup starts, its rows {key (as u64), record indices}).
-pub fn program_rows(data: &[u8], meta: &[u8; 16]) -> Result<(usize, Vec<(u64, Vec<u32>)>)> {
+/// Program lookup rows: {key (as u64), record indices}.
+pub type ProgramRows = Vec<(u64, Vec<u32>)>;
+
+/// The program lookup of a shader database: (where the lookup starts, its rows).
+pub fn program_rows(data: &[u8], meta: &[u8; 16]) -> Result<(usize, ProgramRows)> {
     let (prog, reloc, look) = (u32_at(meta, 0)? as usize, u32_at(meta, 4)? as usize, u32_at(meta, 8)? as usize);
     let start = prog + reloc;
     if start + look != data.len() {
@@ -123,7 +126,7 @@ pub fn add_program_rows(data: &[u8], meta: &[u8; 16], add: &[(u64, Vec<u32>)]) -
 
 /// The texture-set lookup's rows {key, set id}.
 pub fn texture_rows(data: &[u8]) -> Result<Vec<(u64, u64)>> {
-    if data.len() % 16 != 0 {
+    if !data.len().is_multiple_of(16) {
         return bad("the texture-set lookup is not whole rows");
     }
     (0..data.len() / 16).map(|i| Ok((u64_at(data, 16 * i)?, u64_at(data, 16 * i + 8)?))).collect()
@@ -288,7 +291,10 @@ mod tests {
         let (data, meta) = write_depot(&depot);
         assert_eq!(read_depot(&data, &meta).unwrap(), depot);
         assert_eq!(data.len() % 4, 0);
-        let (list, n) = swap_guids(&[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 99], &[([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16], [0xEE; 16])]);
+        let (list, n) = swap_guids(
+            &[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 99],
+            &[([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16], [0xEE; 16])],
+        );
         assert_eq!((list[0], list[1], list[16], list[17], n), (0, 0xEE, 0xEE, 99, 1));
     }
 }

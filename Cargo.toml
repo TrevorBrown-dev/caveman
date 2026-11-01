@@ -7,7 +7,23 @@ default-members = ["crates/caveman-core", "crates/caveman-cli", "crates/caveman-
 
 [workspace.package]
 edition = "2021"
-version = "0.1.0"
+version = "0.2.0"
+license = "GPL-3.0-only"
+repository = "https://github.com/TrevorBrown-dev/caveman"
+homepage = "https://trevorbrown.dev/gh/caveman"
+
+# CI runs `cargo clippy --workspace --all-targets -- -D warnings`. These four lints are off on purpose: the texture and
+# mesh code indexes several slices in lockstep (needless_range_loop), passes the game's many plain parameters as they
+# come (too_many_arguments), and keeps readers' return shapes and build enums as they are (type_complexity,
+# large_enum_variant). Everything else clippy says is fixed, not silenced.
+[workspace.lints.clippy]
+type_complexity = "allow"
+too_many_arguments = "allow"
+needless_range_loop = "allow"
+large_enum_variant = "allow"
+# `chunks_exact(N)` over texel and record bytes reads as the format descriptions do; `as_chunks` can replace it in a
+# pass of its own.
+chunks_exact_to_as_chunks = "allow"
 
 [profile.release]
 opt-level = 3

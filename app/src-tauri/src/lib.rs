@@ -5,3 +5,7 @@ pub mod art;
 pub mod bake;
 pub mod config;
 pub mod library;
+pub mod live;
+pub mod loadout;
+pub mod ring;
+pub mod sqlite;

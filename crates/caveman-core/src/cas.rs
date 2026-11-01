@@ -22,7 +22,9 @@ pub const MAX_PAYLOAD: usize = 0xFFFFF;
 #[derive(Debug)]
 pub enum CasError {
     /// A block header or payload runs past the end of the data.
-    Truncated { at: usize },
+    Truncated {
+        at: usize,
+    },
     /// A compression code this reader does not handle (zstd 0x0F, or unknown).
     Compression(u8),
     /// An encoded block payload over 20 bits (`OverflowError` in `fbw.encode_cas`).
@@ -130,10 +132,7 @@ fn push_block(out: &mut Vec<u8>, decoded: usize, compression: u8, payload: &[u8]
     if payload.len() > MAX_PAYLOAD {
         return Err(CasError::PayloadTooLarge(payload.len()));
     }
-    let packed: u64 = (((decoded & 0xFF_FFFF) as u64) << 32)
-        | ((compression as u64) << 24)
-        | (0x7 << 20)
-        | payload.len() as u64;
+    let packed: u64 = (((decoded & 0xFF_FFFF) as u64) << 32) | ((compression as u64) << 24) | (0x7 << 20) | payload.len() as u64;
     out.extend_from_slice(&packed.to_be_bytes());
     out.extend_from_slice(payload);
     Ok(())

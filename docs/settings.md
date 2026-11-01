@@ -4,6 +4,7 @@ A deck's effects can be set in a small JSON file beside its PNG instead of (or a
 
 - **When a settings file is there it decides the deck's effects**; the suffixes in the PNG's name are then only part of its file name (they are still peeled off the name).
 - **When there is none**, the suffixes apply as before (`Cool Deck.holo-frost.spot.png`).
+- **Switched off**: a drop folder's `.caveman-off.json` (`{"version": 1, "off": ["sub/cool deck.png", ...]}`, paths relative to the folder, lower case, `/` between folders) lists the files the build leaves out; the Caveman app's switch per item writes it, and `caveman`, `Caveman.exe` and the app's build all honour it. The files stay where they are.
 - A settings file that cannot be used (bad JSON, an unknown field, a value out of range, another version) leaves the deck out with a message saying why, rather than building it without the effects asked for.
 
 ## Schema (version 1)
@@ -27,6 +28,7 @@ Every part except `version` is optional; `{"version": 1}` is a plain deck.
 |---|---|---|---|
 | `version` | `1` | (required) | The schema version. |
 | `name` | text | the file name | The deck's name in game (a subfolder's prefix and `--prefix` still go first). With a name, the effects are not added to it; without one, the deck is named like a suffixed one ("Cool Deck Holo Frost"). |
+| `colour` | `"#rrggbb"` | the hex in the file name, else natural wood | What shows through transparent parts of the art. An aura deck's glow takes it too, unless `board.colour` names another. |
 | `finish.kind` | `gloss`, `matte`, `foil`, `chrome`, `glitter`, `holo` | (no finish) | The deck's finish (one per deck). |
 | `finish.mode` | `pearl`, `cellular`, `frost`, `vertical`, `glitter` | `pearl` | The holo pattern (holo only). |
 | `finish.spot` | `true`, `false` | `false` | The finish on the light parts of the art only. |
@@ -79,7 +81,11 @@ A `.gif` (or, with ffmpeg and ffprobe on PATH, a video: mp4, webm, mov, mkv, avi
 
 ## Suffixes and settings
 
-Each suffix has a settings equivalent: `gloss`, `matte`, `foil`, `chrome`, `glitter` and `holo`, `holo-cellular`, `holo-frost`, `holo-vertical`, `holo-glitter` are `finish`; `spot` is `finish.spot`; `emboss` is `emboss`; `cycle` and `glow` are `shader`; `aura` (with a hex colour such as `.aura.00ffff`) and `nyan` are `board`. `caveman --json` reports every deck's effects in this schema (its `settings` field), so a settings file can be seeded from a suffixed deck.
+Each suffix has a settings equivalent: `gloss`, `matte`, `foil`, `chrome`, `glitter` and `holo`, `holo-cellular`, `holo-frost`, `holo-vertical`, `holo-glitter` are `finish`; `spot` is `finish.spot`; `emboss` is `emboss`; `cycle` and `glow` are `shader`; `aura` and `nyan` are `board`. A hex colour in the name (`Cool Deck.ff0000.png`) is the deck's `colour`, and an aura deck's glow takes it too (`board.colour` sets the aura apart). `caveman --json` reports every deck's effects in this schema (its `settings` field), so a settings file can be seeded from a suffixed deck.
+
+## Deck colours
+
+`Cool Deck.ff0000.png` (or `"colour": "#ff0000"` in its settings file) puts red where the art is transparent, instead of natural wood; a fully transparent PNG gives a plain red deck. The game's own plain-colour decks are made the same way (each is solid-colour art: deck materials take no colour). The colour is part of the deck's name in game ("Cool Deck FF0000"), so the same art in several colours gives several decks. Verified in game 2026-10-21 (a logo on 00E5FF, a plain FF0000 deck); under the game's lighting and wear the colours read a little deeper than the hex.
 
 ## Wheels
 

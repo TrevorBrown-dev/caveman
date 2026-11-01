@@ -128,7 +128,7 @@ fn incremental() {
         let _ = fs::remove_dir_all(root.join(d));
     }
     let (decks, wheels, mods, cache) = (root.join("decks"), root.join("wheels"), root.join("mods"), root.join("cache"));
-    copy_dir(Path::new(r"E:\Games\ReSkate\Caveman Decks"), &decks);
+    copy_dir(Path::new(r"E:\Games\ReSkate\Caveman\Decks"), &decks);
     fs::create_dir_all(&wheels).unwrap();
     wheel_face(0.0).write_png(wheels.join("Red Donut.ff0000.png")).unwrap();
     wheel_face(1.0).write_png(wheels.join("Plain Wheel.png")).unwrap();
@@ -138,9 +138,16 @@ fn incremental() {
     o.out = Some(mods.clone());
     o.cache = Some(cache.clone());
     // the deck PNGs: not the layer files in an imported deck's `.layers` (dot-folders are not decks)
+    // (GIFs and videos are animated decks; the previews the builds write are not decks)
     let n_decks = files(&decks)
         .keys()
-        .filter(|k| k.to_lowercase().ends_with(".png") && !k.split(['\\', '/']).any(|part| part.starts_with('.')))
+        .filter(|k| {
+            let parts: Vec<&str> = k.split(['\\', '/']).collect();
+            let name = parts.last().copied().unwrap_or_default();
+            (name.to_lowercase().ends_with(".png") || caveman_core::anim::clip_kind(name).is_some())
+                && !parts.iter().any(|part| part.starts_with('.'))
+                && !parts[0].eq_ignore_ascii_case(caveman_cli::names::PREVIEWS)
+        })
         .count();
 
     // 1. clean: every item built
@@ -157,11 +164,19 @@ fn incremental() {
     same_mod(&root.join("snap-clean").join("Caveman-Decks"), &mods.join("Caveman-Decks"));
 
     // 3. one deck added, one deck's settings changed, one deck removed: only two decks encoded
+    // (the decks are whatever the drop folder's 000 holds: a plain-named PNG gets the settings, another PNG goes)
     let d000 = decks.join("000");
-    fs::copy(d000.join("Dan Da Dan.png"), d000.join("Dan Da Dan Added.foil.png")).unwrap();
-    // (same name, different effects: the cycle twice as fast)
-    fs::write(d000.join("Dan Da Dan.cycle.caveman.json"), r#"{"version": 1, "shader": {"effect": "cycle", "speed": 1.0}}"#).unwrap();
-    fs::remove_file(d000.join("Dan Da Dan.glitter.png")).unwrap();
+    let mut pngs: Vec<PathBuf> =
+        fs::read_dir(&d000).unwrap().map(|e| e.unwrap().path()).filter(|p| p.extension().is_some_and(|x| x.eq_ignore_ascii_case("png"))).collect();
+    pngs.sort();
+    let changed = pngs.iter().find(|p| !p.file_stem().unwrap().to_string_lossy().contains('.')).expect("a PNG deck without suffixes in 000").clone();
+    let removed = pngs.iter().find(|p| **p != changed).expect("a second PNG deck in 000").clone();
+    fs::copy(&changed, d000.join("Incr Added.foil.png")).unwrap();
+    // (same name, different effects: a settings file naming the deck as before, with the cycle)
+    let stem = changed.file_stem().unwrap().to_string_lossy().into_owned();
+    fs::write(caveman_core::settings::sidecar_path(&changed), format!(r#"{{"version": 1, "name": "{stem}", "shader": {{"effect": "cycle", "speed": 1.0}}}}"#))
+        .unwrap();
+    fs::remove_file(&removed).unwrap();
     let (_, text, t_incr) = go(&o);
     print!("{text}");
     let kept = all - 1 - 1; // the removed deck and the deck whose settings changed are not reused
@@ -201,7 +216,7 @@ fn synthetic_200() {
     o.cache = Some(root.join("cache"));
 
     let (outcome, _, t_clean) = go(&o);
-    assert_eq!(outcome, Outcome::Built { decks: 200, wheels: 0, shaders: caveman_cli::Shaders::None });
+    assert_eq!(outcome, Outcome::Built { decks: 200, wheels: 0, grips: 0, cutouts: 0, shaders: caveman_cli::Shaders::None });
     let (_, text, t_same) = go(&o);
     assert!(text.contains("200 of 200 item(s) reused"), "{text}");
     synthetic_art(200).write_png(decks.join("000").join("Synth 200.png")).unwrap();
@@ -212,5 +227,7 @@ fn synthetic_200() {
     clean.no_cache = true;
     let (_, _, t_final_clean) = go(&clean);
     same_mod(&mods.join("Caveman-Decks"), &root.join("mods-clean").join("Caveman-Decks"));
-    println!("TIMING synthetic: 200 decks clean {t_clean:.1} s, unchanged rebuild {t_same:.1} s, one deck added {t_add:.1} s, clean 201 decks {t_final_clean:.1} s");
+    println!(
+        "TIMING synthetic: 200 decks clean {t_clean:.1} s, unchanged rebuild {t_same:.1} s, one deck added {t_add:.1} s, clean 201 decks {t_final_clean:.1} s"
+    );
 }

@@ -70,7 +70,7 @@ fn flow() {
     fs::create_dir_all(&decks).unwrap();
     fs::create_dir_all(&wheels).unwrap();
     fs::create_dir_all(&mods).unwrap();
-    let art = Path::new(r"E:\Games\ReSkate\Caveman Decks\000\Dan Da Dan.png");
+    let art = Path::new(r"E:\Games\ReSkate\Caveman\Decks\000\Dan Da Dan.png");
     let deck = |name: &str, json: Option<&str>| {
         fs::copy(art, decks.join(format!("{name}.png"))).unwrap();
         if let Some(j) = json {
@@ -97,7 +97,7 @@ fn flow() {
 
     // 1. the first build: settings files override suffixes; wheels; the shader mod (cycle, nyan)
     let (outcome, text) = go(&o);
-    assert_eq!(outcome, Outcome::Built { decks: 5, wheels: 2, shaders: Shaders::Built });
+    assert_eq!(outcome, Outcome::Built { decks: 5, wheels: 2, grips: 0, cutouts: 0, shaders: Shaders::Built });
     for line in [
         "  000 - Plain JSON Holo Frost",
         "  000 - Aura Colour Aura FF8800",
@@ -130,14 +130,14 @@ fn flow() {
     for f in ["Nyan Named.foil.png", "Nyan Named.foil.caveman.json", "Fast Cycle.png", "Fast Cycle.caveman.json"] {
         fs::remove_file(decks.join(f)).unwrap();
     }
-    assert_eq!(go(&o).0, Outcome::Built { decks: 3, wheels: 2, shaders: Shaders::Removed });
+    assert_eq!(go(&o).0, Outcome::Built { decks: 3, wheels: 2, grips: 0, cutouts: 0, shaders: Shaders::Removed });
     assert!(!mods.join(SHADER_MOD).exists());
 
     // 5. a Caveman-Shaders that Caveman did not build is never removed
     fs::create_dir_all(mods.join(SHADER_MOD)).unwrap();
     fs::write(mods.join(SHADER_MOD).join("reskate-build.json"), r#"{"tool": "ReSkateStudio"}"#).unwrap();
     touch(&decks.join("Plain JSON.png"));
-    assert_eq!(go(&o).0, Outcome::Built { decks: 3, wheels: 2, shaders: Shaders::None });
+    assert_eq!(go(&o).0, Outcome::Built { decks: 3, wheels: 2, grips: 0, cutouts: 0, shaders: Shaders::None });
     assert!(mods.join(SHADER_MOD).join("reskate-build.json").is_file());
 
     // 6. nothing left to build: Caveman's mod removed, the other left

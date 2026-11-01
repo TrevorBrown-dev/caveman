@@ -45,9 +45,15 @@ fn compile(source: &str, entry: &str, target: &str) -> Vec<u8> {
 #[test]
 fn embedded_shaders_match_the_source() {
     let dir = shader_dir();
-    let source = std::fs::read_to_string(dir.join("overlay.hlsl")).unwrap();
     let regen = std::env::var_os("CAVEMAN_REGEN_SHADERS").is_some();
-    for (entry, target, file) in [("vs_main", "vs_5_0", "overlay_vs.dxbc"), ("ps_main", "ps_5_0", "overlay_ps.dxbc")] {
+    let shaders = [
+        ("overlay.hlsl", "vs_main", "vs_5_0", "overlay_vs.dxbc"),
+        ("overlay.hlsl", "ps_main", "ps_5_0", "overlay_ps.dxbc"),
+        ("pip.hlsl", "vs_main", "vs_5_0", "pip_vs.dxbc"),
+        ("pip.hlsl", "ps_main", "ps_5_0", "pip_ps.dxbc"),
+    ];
+    for (hlsl, entry, target, file) in shaders {
+        let source = std::fs::read_to_string(dir.join(hlsl)).unwrap();
         let fresh = compile(&source, entry, target);
         assert_eq!(&fresh[..4], b"DXBC", "{file} is not DXBC");
         let path = dir.join(file);

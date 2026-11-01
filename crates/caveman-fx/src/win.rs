@@ -14,6 +14,10 @@ pub const INVALID_HANDLE_VALUE: HANDLE = -1isize as HANDLE;
 pub const MEM_COMMIT: u32 = 0x1000;
 pub const MEM_RESERVE: u32 = 0x2000;
 pub const MEM_RELEASE: u32 = 0x8000;
+pub const MEM_FREE: u32 = 0x10000;
+pub const FILE_MAP_ALL_ACCESS: u32 = 0xF001F;
+pub const EVENT_MODIFY_STATE: u32 = 0x0002;
+pub const ERROR_ALREADY_EXISTS: u32 = 183;
 pub const MEM_PRIVATE: u32 = 0x20000;
 pub const MEM_MAPPED: u32 = 0x40000;
 pub const PAGE_NOACCESS: u32 = 0x01;
@@ -180,6 +184,14 @@ extern "system" {
     pub fn VirtualFree(address: *mut c_void, size: usize, kind: u32) -> BOOL;
     pub fn VirtualAllocEx(process: HANDLE, address: *mut c_void, size: usize, kind: u32, protect: u32) -> *mut c_void;
     pub fn VirtualFreeEx(process: HANDLE, address: *mut c_void, size: usize, kind: u32) -> BOOL;
+    pub fn FlushInstructionCache(process: HANDLE, base: *const c_void, size: usize) -> BOOL;
+    pub fn CreateFileMappingW(file: HANDLE, attrs: *mut c_void, protect: u32, size_hi: u32, size_lo: u32, name: *const u16) -> HANDLE;
+    pub fn OpenFileMappingW(access: u32, inherit: BOOL, name: *const u16) -> HANDLE;
+    pub fn MapViewOfFile(mapping: HANDLE, access: u32, offset_hi: u32, offset_lo: u32, bytes: usize) -> *mut c_void;
+    pub fn UnmapViewOfFile(view: *const c_void) -> BOOL;
+    pub fn SetConsoleCtrlHandler(handler: Option<unsafe extern "system" fn(u32) -> BOOL>, add: BOOL) -> BOOL;
+    pub fn OpenEventW(access: u32, inherit: BOOL, name: *const u16) -> HANDLE;
+    pub fn SetEvent(event: HANDLE) -> BOOL;
     pub fn K32QueryWorkingSetEx(process: HANDLE, info: *mut c_void, size: u32) -> BOOL;
     pub fn CreateThread(attrs: *mut c_void, stack: usize, start: ThreadProc, param: *mut c_void, flags: u32, id: *mut u32) -> HANDLE;
     pub fn CreateRemoteThread(process: HANDLE, attrs: *mut c_void, stack: usize, start: *mut c_void, param: *mut c_void, flags: u32, id: *mut u32) -> HANDLE;
@@ -330,6 +342,20 @@ pub fn read_ptr(addr: usize) -> Option<usize> {
     read_u64(addr).map(|v| v as usize)
 }
 
+/// Copies `bytes` to `addr` in this process through the kernel (as [`read_into`] reads): false when the range is
+/// unmapped, read-only or out of range, never a fault. For data the game keeps writable (its heaps), not code.
+pub fn write_into(addr: usize, bytes: &[u8]) -> bool {
+    if bytes.is_empty() {
+        return true;
+    }
+    if addr < LOWEST || addr.checked_add(bytes.len()).is_none_or(|end| end > HIGHEST) {
+        return false;
+    }
+    let mut put = 0usize;
+    let ok = unsafe { WriteProcessMemory(target(), addr as *mut c_void, bytes.as_ptr().cast(), bytes.len(), &mut put) };
+    ok != 0 && put == bytes.len()
+}
+
 /// A NUL-terminated byte string of at most `max` bytes at `addr` (printable ASCII only), or None. A string near the
 /// end of a mapped page is read up to the page end.
 pub fn read_cstr(addr: usize, max: usize) -> Option<String> {
@@ -355,6 +381,7 @@ pub fn read_cstr(addr: usize, max: usize) -> Option<String> {
 }
 
 /// The full path of a module of this process (None: the exe).
+#[allow(clippy::not_unsafe_ptr_arg_deref, reason = "an opaque module handle, checked by the call itself, not a pointer this reads")]
 pub fn module_path(module: HANDLE) -> Option<String> {
     let mut buf = vec![0u16; 32768];
     let n = unsafe { GetModuleFileNameW(module, buf.as_mut_ptr(), buf.len() as u32) } as usize;

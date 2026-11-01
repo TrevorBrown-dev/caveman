@@ -86,9 +86,7 @@ fn patch_with(ir_text: &str, anim: bool) -> Result<(String, String), String> {
     let get = |row: u32, col: u32| stores.iter().find(|(k, _)| *k == (row, col)).map(|(_, s)| s);
     let first_store = stores.iter().map(|(_, s)| s.start).min().ok_or("no storeOutput")?;
     let line_start = ir_text[..first_store].rfind('\n').map_or(0, |i| i + 1);
-    let base: Vec<&str> = (0..3)
-        .map(|c| get(1, c).map(|s| s.operand.as_str()).ok_or_else(|| format!("no SV_Target1 store {c}")))
-        .collect::<Result<_, _>>()?;
+    let base: Vec<&str> = (0..3).map(|c| get(1, c).map(|s| s.operand.as_str()).ok_or_else(|| format!("no SV_Target1 store {c}"))).collect::<Result<_, _>>()?;
     let glow_target = (0..3).all(|c| get(3, c).map_or("i32", |s| s.kind.as_str()) == "f32");
     // the marker, clock and effect flags: before the stores (as always), or at the top of the program when the
     // flipbook needs them earlier (anim)
@@ -146,9 +144,7 @@ fn patch_with(ir_text: &str, anim: bool) -> Result<(String, String), String> {
         }
         setup.push("  %cvm_on = and i1 %cvm_m3, %cvm_t5".into());
         // time and angle
-        setup.push(format!(
-            "  %cvm_clock = call %dx.types.CBufRet.f32 @dx.op.cbufferLoadLegacy.f32(i32 59, %dx.types.Handle {clock}, i32 {CLOCK_REGISTER})"
-        ));
+        setup.push(format!("  %cvm_clock = call %dx.types.CBufRet.f32 @dx.op.cbufferLoadLegacy.f32(i32 59, %dx.types.Handle {clock}, i32 {CLOCK_REGISTER})"));
         setup.push("  %cvm_t = extractvalue %dx.types.CBufRet.f32 %cvm_clock, 0".into());
         setup.push(format!("  %cvm_speed = fmul float %cvm_c_g, {}", f32(2.0)));
         setup.push("  %cvm_turns = fmul float %cvm_t, %cvm_speed".into());
@@ -168,11 +164,7 @@ fn patch_with(ir_text: &str, anim: bool) -> Result<(String, String), String> {
         // pulse: brightness 0.1 to 1 over 2 seconds of the clock
         setup.push(format!("  %cvm_pt = fmul float %cvm_t, {}", f32(0.5)));
         setup.push("  %cvm_pf = call float @dx.op.unary.f32(i32 22, float %cvm_pt)".into());
-        setup.push(format!(
-            "  %cvm_pk = call float @dx.op.tertiary.f32(i32 46, float %cvm_pf, float {}, float {})",
-            f32(0.9),
-            f32(0.1)
-        ));
+        setup.push(format!("  %cvm_pk = call float @dx.op.tertiary.f32(i32 46, float %cvm_pf, float {}, float {})", f32(0.9), f32(0.1)));
         setup.push(format!("  %cvm_bright = select i1 %cvm_is_pul, float %cvm_pk, float {}", f32(1.0)));
         setup.push("  %cvm_cos = call float @dx.op.unary.f32(i32 12, float %cvm_ang)".into());
         setup.push("  %cvm_sin = call float @dx.op.unary.f32(i32 13, float %cvm_ang)".into());

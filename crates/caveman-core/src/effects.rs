@@ -145,7 +145,10 @@ pub enum NyanTrigger {
 pub enum BoardEffect {
     /// sRGB colour; None takes the art's most vivid colour (mixins.art_colour).
     Aura(Option<[u8; 3]>),
-    Nyan { steps: f64, trigger: NyanTrigger },
+    Nyan {
+        steps: f64,
+        trigger: NyanTrigger,
+    },
 }
 
 /// Everything a deck can carry besides its art: what the sidecar JSON and the filename suffixes describe.
@@ -164,8 +167,22 @@ pub struct DeckEffects {
 
 /// Every suffix word Caveman knows (mixins.EFFECTS), in mixins' order.
 pub const SUFFIXES: [&str; 16] = [
-    "gloss", "matte", "foil", "chrome", "glitter", "holo", "holo-cellular", "holo-frost", "holo-vertical", "holo-glitter",
-    "spot", "emboss", "aura", "nyan", "cycle", "glow",
+    "gloss",
+    "matte",
+    "foil",
+    "chrome",
+    "glitter",
+    "holo",
+    "holo-cellular",
+    "holo-frost",
+    "holo-vertical",
+    "holo-glitter",
+    "spot",
+    "emboss",
+    "aura",
+    "nyan",
+    "cycle",
+    "glow",
 ];
 
 /// Whether `word` (lower case) is an effect suffix.
@@ -402,11 +419,8 @@ pub fn spot(art: &Image) -> Vec<f64> {
 pub fn mask(finish: Finish, default: &Image, weight: Option<&[f64]>) -> Image {
     let d = default.to_rgb();
     let n = d.width * d.height;
-    let (glitter_metal, glitter_gloss) = if finish == Finish::Glitter {
-        (flakes(d.width, d.height, 2, 1), flakes(d.width, d.height, 2, 2))
-    } else {
-        (Vec::new(), Vec::new())
-    };
+    let (glitter_metal, glitter_gloss) =
+        if finish == Finish::Glitter { (flakes(d.width, d.height, 2, 1), flakes(d.width, d.height, 2, 2)) } else { (Vec::new(), Vec::new()) };
     let mut out = Image::new(d.width, d.height, 3);
     for i in 0..n {
         let dv = [d.data[i * 3] as f64, d.data[i * 3 + 1] as f64, d.data[i * 3 + 2] as f64];
@@ -431,6 +445,24 @@ pub fn mask(finish: Finish, default: &Image, weight: Option<&[f64]>) -> Image {
         }
     }
     out
+}
+
+/// The holo map's idle red: 0, no holo. The shader multiplies its iridescence by the holo map's red (a live level
+/// per texel, 0 to full), gated by the mask's metal; a deck without a holo finish ships black, `finish holo` writes
+/// red. (A model of 2026-10-22 midday had the game choosing a shader variant at equip by this map's content, with a
+/// re-equip between a metal and a holo finish: wrong. The material's parameters are the same either way; the holo
+/// showed late because the in-world board's copies of the mask and the normal map were written raw instead of as
+/// the game encodes them, see [`ridden_normal`] and [`ridden_mask`]. Every write is live, no re-equip.)
+pub const HOLO_IDLE_RED: u8 = 0;
+
+/// The metal (B) the game's compositor puts into a holo deck's composited mask (read back live 2026-10-22: 25 on and
+/// off the deck, where our source mask had 0), and which the world shader multiplies the iridescence by: a mask copy
+/// written with B 0 switches the holo off whatever the holo map says. A live holo mask carries at least this.
+pub const HOLO_METAL_FLOOR: u8 = 25;
+
+/// The holo map of a deck with no holo: the idle red everywhere (see [`HOLO_IDLE_RED`]).
+pub fn holo_idle() -> Image {
+    Image::filled(W, H, &[HOLO_IDLE_RED, 0, 0])
 }
 
 /// The `param_graphic_rgb` texture: red 255 where the deck is holo (mixins.holo_map).
@@ -497,6 +529,64 @@ pub fn encode_normal(nx: &[f64], ny: &[f64], width: usize, height: usize) -> Ima
         }
     }
     out
+}
+
+/// The in-world board's normal map as the game builds it from a deck's normal map (the nameless RGBA8 UNORM copy
+/// two ids after the ridden art copy): per texel, the source RGB decoded as a signed vector and normalised, biased
+/// back to 0..1 and normalised AGAIN, stored as plain UNORM (so a flat 128,128,255 lands as 104,104,208, and any
+/// texel with blue under 128 as 180,180,0). Measured 2026-10-22 by writing gradients into The Caveman's `_ny` and
+/// peeking the copy the game rebuilt at the next equip: 52 texels, every one within 1.1 of this formula, the same
+/// value at every position (no spatial term). A copy written with the raw bytes instead gives the in-world board a
+/// mis-encoded normal map: chrome and metal then look flat in game while the pause menu, which samples the source
+/// itself, shows them right.
+pub fn ridden_normal(src: &Image) -> Image {
+    let mut out = src.clone();
+    let ch = out.channels;
+    if ch < 3 {
+        return out;
+    }
+    for px in out.data.chunks_mut(ch) {
+        let mut n = [0f64; 3];
+        for c in 0..3 {
+            n[c] = px[c] as f64 / 255.0 * 2.0 - 1.0;
+        }
+        let len = (n[0] * n[0] + n[1] * n[1] + n[2] * n[2]).sqrt();
+        if len > 0.0 {
+            for v in &mut n {
+                *v /= len;
+            }
+        }
+        let w = [n[0] * 0.5 + 0.5, n[1] * 0.5 + 0.5, n[2] * 0.5 + 0.5];
+        let len = (w[0] * w[0] + w[1] * w[1] + w[2] * w[2]).sqrt();
+        for c in 0..3 {
+            px[c] = byte(if len > 0.0 { w[c] / len } else { w[c] } * 255.0);
+        }
+    }
+    out
+}
+
+/// The in-world board's mask as the game builds it from a deck's mask (the copy one id after the ridden art copy):
+/// occlusion and smoothness as they are, the metal channel lifted a tenth of the way to full (blue 4 lands as 29, 128
+/// as 141: never under 25). Measured 2026-10-22 as [`ridden_normal`] was, on the same equip.
+pub fn ridden_mask(src: &Image) -> Image {
+    let mut out = src.clone();
+    let ch = out.channels;
+    if ch >= 3 {
+        for px in out.data.chunks_mut(ch) {
+            px[2] = byte(px[2] as f64 * 0.9 + 25.5);
+        }
+    }
+    out
+}
+
+/// A layer as the in-world board's copy of it must be written: the normal map and the mask re-encoded as the game's
+/// compositor does ([`ridden_normal`], [`ridden_mask`]); the art and the holo map as they are.
+pub fn ridden_layer(slot: &str, img: &Image) -> Image {
+    match slot {
+        "ny" => ridden_normal(img),
+        "osk" => ridden_mask(img),
+        _ => img.clone(),
+    }
 }
 
 /// The deck's normal map, or None when nothing raises the surface (mixins.normal_map): `emboss` raises the light
@@ -654,8 +744,7 @@ fn hsv_to_rgb(h: f64, s: f64, v: f64) -> [f64; 3] {
 /// glows in when no colour is given; white for grey art (mixins.art_colour).
 pub fn art_colour(art: &Image) -> [u8; 3] {
     let small = resize_bicubic(&art.to_rgb(), 64, 256);
-    let px: Vec<[f64; 3]> =
-        small.data.chunks_exact(3).map(|p| [p[0] as f64 / 255.0, p[1] as f64 / 255.0, p[2] as f64 / 255.0]).collect();
+    let px: Vec<[f64; 3]> = small.data.chunks_exact(3).map(|p| [p[0] as f64 / 255.0, p[1] as f64 / 255.0, p[2] as f64 / 255.0]).collect();
     let vivid: Vec<f64> = px
         .iter()
         .map(|p| {
@@ -705,21 +794,33 @@ pub struct Layers {
     /// Several state-fired board effects on one deck (Caveman FX's combo decks; empty for every other deck). Used
     /// instead of `board` and `trigger`.
     pub combo: Vec<(ResolvedBoard, StateTrigger)>,
+    /// Float parameters of the appearance preset set by ParamKey GUID (`build::PARAM_*`): The Caveman's iridescence
+    /// amount at 1.0 (the holo host's is 0.25). A key the host's preset lacks fails the build.
+    pub preset_floats: Vec<(String, f32)>,
 }
 
 /// A board effect ready to build: an aura's colour is known.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum ResolvedBoard {
     Aura([u8; 3]),
-    Nyan { steps: f64, trigger: NyanTrigger },
+    Nyan {
+        steps: f64,
+        trigger: NyanTrigger,
+    },
     /// One of the game's own effect blueprints, (file, instance) GUIDs, played from the middle of the board (a stock
     /// burst such as `ebp_chr_ctd_impact_a`; not copied).
     Burst((Guid, Guid)),
     /// An effect blueprint played as it is at chosen points on the board: one of the game's (shared bundle) or one the
     /// mod ships on its own (a retuned copy, a sprite effect: Caveman FX's library decks). Imported by GUID, not copied.
-    Stock { blueprint: (Guid, Guid), at: BoardPoints },
+    Stock {
+        blueprint: (Guid, Guid),
+        at: BoardPoints,
+    },
     /// An aura with its strength set (light, trails); [`AuraTuning::STOCK`] is the plain aura.
-    AuraTuned { colour: [u8; 3], tuning: AuraTuning },
+    AuraTuned {
+        colour: [u8; 3],
+        tuning: AuraTuning,
+    },
 }
 
 /// Where on the board an effect plays: attach points in board space (x across, y up, z along, metres).
@@ -786,8 +887,14 @@ pub struct AuraTuning {
 
 impl AuraTuning {
     /// The plain aura (Caveman's decks and the FX decks): exactly what [`aura_blueprint`] has always written.
-    pub const STOCK: AuraTuning =
-        AuraTuning { light_intensity: LIGHT_INTENSITY, light_radius: LIGHT_RADIUS, trail_boost: TRAIL_BOOST, trail_dim: TRAIL_DIM, trail_width: None, trail_life: None };
+    pub const STOCK: AuraTuning = AuraTuning {
+        light_intensity: LIGHT_INTENSITY,
+        light_radius: LIGHT_RADIUS,
+        trail_boost: TRAIL_BOOST,
+        trail_dim: TRAIL_DIM,
+        trail_width: None,
+        trail_life: None,
+    };
 }
 
 /// How to make a stock effect bigger, brighter, longer or denser: a retuned copy of a blueprint ([`retune_blueprint`]).
@@ -798,6 +905,9 @@ pub struct EffectTuning {
     pub count: f64,
     /// Particle size (PropertyId -711019869, a min and max in metres) and ribbon width (226981187).
     pub size: f64,
+    /// A particle size the scaling does not go past, metres (0: no limit): flash sprites already a metre wide stay
+    /// near that while sparks a centimetre wide grow. A size already above it is left as it is.
+    pub max_size: f64,
     /// Particle and emitter life (seconds; an emitter life of 0, endless, stays 0).
     pub life: f64,
     /// The colour parameters (-1752990270, -1752990271: HDR rgb, so above 1 glows brighter).
@@ -811,7 +921,18 @@ pub struct EffectTuning {
 }
 
 impl EffectTuning {
-    pub const NONE: EffectTuning = EffectTuning { count: 1.0, size: 1.0, life: 1.0, brightness: 1.0, light_intensity: 1.0, light_radius: 1.0, light_life: 1.0 };
+    pub const NONE: EffectTuning =
+        EffectTuning { count: 1.0, size: 1.0, max_size: 0.0, life: 1.0, brightness: 1.0, light_intensity: 1.0, light_radius: 1.0, light_life: 1.0 };
+
+    /// A size scaled as this tuning says (`max_size` applied).
+    pub fn scale_size(&self, v: f64) -> f64 {
+        let scaled = v * self.size;
+        if self.max_size > 0.0 && scaled > self.max_size {
+            v.max(self.max_size)
+        } else {
+            scaled
+        }
+    }
 }
 
 /// How a state-fired board effect plays (`TriggerOutputUsage`, knowledge/state-effects-runtime.md).
@@ -960,12 +1081,7 @@ fn internal(v: &Value) -> ebx::Result<usize> {
 /// component, after editing it.
 fn edit_components(doc: &mut Document, mut decide: impl FnMut(&mut Document, usize, usize) -> ebx::Result<bool>) -> ebx::Result<()> {
     let effect = *doc.instances_of("EffectEntityData").first().ok_or_else(|| err("no EffectEntityData"))?;
-    let components: Vec<Value> = doc
-        .object(effect)?
-        .find("Components")
-        .and_then(|f| f.value.data.as_array())
-        .ok_or_else(|| err("no Components"))?
-        .clone();
+    let components: Vec<Value> = doc.object(effect)?.find("Components").and_then(|f| f.value.data.as_array()).ok_or_else(|| err("no Components"))?.clone();
     let mut keep = Vec::new();
     for v in components {
         let i = internal(&v)?;
@@ -1082,8 +1198,13 @@ pub fn retune_blueprint(doc: &mut Document, t: &EffectTuning) -> ebx::Result<usi
     for i in components_of(doc, "EmitterGraphEntityData") {
         let o = doc.object_mut(i)?;
         let set = |o: &Object, flag: &str| -> bool { o.get(&format!("EmitterGraphOverrides.{flag}")).ok().and_then(|d| d.as_bool()).unwrap_or(false) };
-        let (rate, max, init, life, elife) =
-            (set(o, "IsSpawnRateOverrideSet"), set(o, "IsParticleMaxCountOverrideSet"), set(o, "IsInitialParticleCountOverrideSet"), set(o, "IsParticleLifeSpanOverrideSet"), set(o, "IsEmitterLifeSpanOverrideSet"));
+        let (rate, max, init, life, elife) = (
+            set(o, "IsSpawnRateOverrideSet"),
+            set(o, "IsParticleMaxCountOverrideSet"),
+            set(o, "IsInitialParticleCountOverrideSet"),
+            set(o, "IsParticleLifeSpanOverrideSet"),
+            set(o, "IsEmitterLifeSpanOverrideSet"),
+        );
         for (on, field, k) in [
             (rate, "SpawnRate", t.count),
             (max, "ParticleMaxCount", t.count),
@@ -1098,10 +1219,10 @@ pub fn retune_blueprint(doc: &mut Document, t: &EffectTuning) -> ebx::Result<usi
         for prm in o.find_mut("EmitterGraphParams").and_then(|f| f.value.data.as_array_mut()).ok_or_else(|| err("no EmitterGraphParams"))? {
             let po = prm.data.as_object_mut().ok_or_else(|| err("a parameter is not an object"))?;
             let pid = po.find("PropertyId").and_then(|f| f.value.data.as_i64());
-            let (axes, k): (&[&str], f64) = match pid {
-                Some(SPRITE_SIZE) => (&["x", "y"], t.size),
-                Some(WIDTH) => (&["x"], t.size),
-                Some(TRAIL_COLOUR) | Some(TRAIL_COLOUR2) => (&["x", "y", "z"], t.brightness),
+            let (axes, k, sized): (&[&str], f64, bool) = match pid {
+                Some(SPRITE_SIZE) => (&["x", "y"], t.size, true),
+                Some(WIDTH) => (&["x"], t.size, true),
+                Some(TRAIL_COLOUR) | Some(TRAIL_COLOUR2) => (&["x", "y", "z"], t.brightness, false),
                 _ => continue,
             };
             if k == 1.0 {
@@ -1109,7 +1230,7 @@ pub fn retune_blueprint(doc: &mut Document, t: &EffectTuning) -> ebx::Result<usi
             }
             for a in axes {
                 let v = po.get(&format!("Value.{a}"))?.as_f64().ok_or_else(|| err("a parameter value that is not a number"))?;
-                po.set(&format!("Value.{a}"), Data::F64(v * k))?;
+                po.set(&format!("Value.{a}"), Data::F64(if sized { t.scale_size(v) } else { v * k }))?;
             }
             changed += 1;
         }
@@ -1259,11 +1380,7 @@ pub fn effect_asset(doc: &mut Document, blueprint: (Guid, Guid), points: &[[f64;
     let used: Vec<usize> = items[..points.len()].to_vec();
     let effect_item = *doc.instances_of("SkaterVfxEffectItem").first().ok_or_else(|| err("no SkaterVfxEffectItem"))?;
     {
-        let effects = doc
-            .object_mut(effect_item)?
-            .find_mut("Effects")
-            .and_then(|f| f.value.data.as_array_mut())
-            .ok_or_else(|| err("no Effects"))?;
+        let effects = doc.object_mut(effect_item)?.find_mut("Effects").and_then(|f| f.value.data.as_array_mut()).ok_or_else(|| err("no Effects"))?;
         let mut kept = Vec::new();
         for v in effects.drain(..) {
             if used.contains(&internal(&v)?) {
@@ -1295,7 +1412,13 @@ pub fn effect_asset(doc: &mut Document, blueprint: (Guid, Guid), points: &[[f64;
 /// [`effect_asset`] for any number of points: with more points than the template's attachments, the further ones are
 /// copies of the first attachment (`next_guid` gives their GUIDs; it is not called otherwise, so up to the template's
 /// count the result is exactly `effect_asset`'s).
-pub fn effect_asset_at(doc: &mut Document, blueprint: (Guid, Guid), points: &[[f64; 3]], identity: i64, next_guid: &mut dyn FnMut() -> Guid) -> ebx::Result<()> {
+pub fn effect_asset_at(
+    doc: &mut Document,
+    blueprint: (Guid, Guid),
+    points: &[[f64; 3]],
+    identity: i64,
+    next_guid: &mut dyn FnMut() -> Guid,
+) -> ebx::Result<()> {
     let have = doc.instances_of("SkaterVfxTriggerableItem").len();
     if points.len() <= have {
         return effect_asset(doc, blueprint, points, identity);
@@ -1391,6 +1514,39 @@ pub fn foil_mode_remap(mode: FoilMode) -> HashMap<Guid, Guid> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Texels peeked from the copies the game rebuilt on 2026-10-22 (source RGB -> the copy's), one per band of the
+    /// calibration gradients: the formulas must land within 1 of each.
+    #[test]
+    fn ridden_copies_match_the_games_own() {
+        let normal = [
+            ([8u8, 127, 255], [40u8, 125, 218]),
+            ([104, 127, 255], [89, 107, 214]),
+            ([127, 127, 255], [104, 104, 208]),
+            ([248, 127, 255], [165, 97, 168]),
+            ([127, 40, 255], [119, 52, 219]),
+            ([127, 232, 255], [98, 159, 173]),
+            ([127, 127, 8], [180, 180, 1]),
+            ([127, 127, 136], [100, 100, 212]),
+            ([127, 127, 152], [103, 103, 210]),
+        ];
+        for (src, want) in normal {
+            let got = ridden_normal(&Image::filled(2, 2, &src));
+            for c in 0..3 {
+                assert!((got.data[c] as i32 - want[c] as i32).abs() <= 1, "normal {src:?}: got {:?}, the game wrote {want:?}", &got.data[..3]);
+            }
+        }
+        let mask = [([255u8, 16, 4], 29u8), ([255, 128, 128], 141), ([255, 240, 249], 250), ([255, 255, 255], 255), ([0, 0, 0], 26)];
+        for (src, want) in mask {
+            let got = ridden_mask(&Image::filled(1, 1, &src));
+            assert_eq!(&got.data[..2], &src[..2], "mask {src:?}: red and green pass as they are");
+            assert!((got.data[2] as i32 - want as i32).abs() <= 1, "mask {src:?}: blue {} , the game wrote {want}", got.data[2]);
+        }
+        // four channels: the alpha stays
+        let got = ridden_normal(&Image::filled(1, 1, &[127, 127, 255, 77]));
+        assert_eq!(got.data, vec![104, 104, 208, 77]);
+        assert_eq!(ridden_layer("rgb", &Image::filled(1, 1, &[9, 8, 7])).data, vec![9, 8, 7]);
+    }
 
     #[test]
     fn numpy_default_rng_matches() {

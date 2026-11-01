@@ -193,10 +193,7 @@ pub fn patch_spawn(ir: &str) -> Result<String, String> {
         c.push(format!("  %bns_i{k} = bitcast float %bns_n{k} to i32"));
         c.push(format!("  %bns_s{k} = select i1 %bns_on, i32 %bns_i{k}, i32 {val}"));
     }
-    let store = line.replace(
-        &format!("i32 {}, i32 {}, i32 {}, i32 undef, i8 7", v[0], v[1], v[2]),
-        "i32 %bns_s0, i32 %bns_s1, i32 %bns_s2, i32 undef, i8 7",
-    );
+    let store = line.replace(&format!("i32 {}, i32 {}, i32 {}, i32 undef, i8 7", v[0], v[1], v[2]), "i32 %bns_s0, i32 %bns_s1, i32 %bns_s2, i32 undef, i8 7");
     let out = ir.replacen(&line, &format!("{}\n{store}", c.join("\n")), 1);
     set_valver(&declare(out)?)
 }
@@ -252,10 +249,7 @@ pub fn patch_sim(ir: &str) -> Result<String, String> {
     );
     let out = ir.replacen(&pline, &format!("{}\n{pstore}", c.join("\n")), 1);
     let keep: Vec<String> = (0..3).map(|k| format!("  %bnm_v{k} = select i1 %bnm_on, i32 {}, i32 {}", old_v[k], v[k])).collect();
-    let vstore = vline.replace(
-        &format!("i32 {}, i32 {}, i32 {}, i32 undef, i8 7", v[0], v[1], v[2]),
-        "i32 %bnm_v0, i32 %bnm_v1, i32 %bnm_v2, i32 undef, i8 7",
-    );
+    let vstore = vline.replace(&format!("i32 {}, i32 {}, i32 {}, i32 undef, i8 7", v[0], v[1], v[2]), "i32 %bnm_v0, i32 %bnm_v1, i32 %bnm_v2, i32 undef, i8 7");
     let out = out.replacen(&vline, &format!("{}\n{vstore}", keep.join("\n")), 1);
     set_valver(&declare(out)?)
 }
@@ -342,12 +336,7 @@ pub fn patch_vs(flat_ir: &str) -> Result<String, String> {
     let anchor = one(
         lines
             .iter()
-            .filter(|l| {
-                l.trim_start()
-                    .strip_prefix("%nyw_dz = select i1 %nyw_on, float %nyw_fz, float ")
-                    .and_then(numbered)
-                    .is_some_and(|(_, r)| r.is_empty())
-            })
+            .filter(|l| l.trim_start().strip_prefix("%nyw_dz = select i1 %nyw_on, float %nyw_fz, float ").and_then(numbered).is_some_and(|(_, r)| r.is_empty()))
             .map(|l| l.to_string())
             .collect(),
         "the flat direction",

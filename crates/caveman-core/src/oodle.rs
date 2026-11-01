@@ -57,36 +57,11 @@ extern "system" {
 
 /// `OodleLZ_Decompress(compBuf, compBufSize, rawBuf, rawLen, fuzzSafe, checkCRC, verbosity, decBufBase, decBufSize,
 /// fpCallback, callbackUserData, decoderMemory, decoderMemorySize, threadPhase) -> SINTa`
-type DecompressFn = unsafe extern "C" fn(
-    *const c_void,
-    i64,
-    *mut c_void,
-    i64,
-    i32,
-    i32,
-    i32,
-    *mut c_void,
-    i64,
-    *mut c_void,
-    *mut c_void,
-    *mut c_void,
-    i64,
-    i32,
-) -> i64;
+type DecompressFn =
+    unsafe extern "C" fn(*const c_void, i64, *mut c_void, i64, i32, i32, i32, *mut c_void, i64, *mut c_void, *mut c_void, *mut c_void, i64, i32) -> i64;
 /// `OodleLZ_Compress(compressor, rawBuf, rawLen, compBuf, level, pOptions, dictionaryBase, lrm, scratchMem,
 /// scratchSize) -> SINTa`
-type CompressFn = unsafe extern "C" fn(
-    i32,
-    *const c_void,
-    i64,
-    *mut c_void,
-    i32,
-    *const c_void,
-    *const c_void,
-    *const c_void,
-    *mut c_void,
-    i64,
-) -> i64;
+type CompressFn = unsafe extern "C" fn(i32, *const c_void, i64, *mut c_void, i32, *const c_void, *const c_void, *const c_void, *mut c_void, i64) -> i64;
 /// `OodleLZ_GetCompressedBufferSizeNeeded(compressor, rawSize) -> SINTa`
 type SizeNeededFn = unsafe extern "C" fn(i32, i64) -> i64;
 
@@ -116,12 +91,7 @@ pub fn find_dll(game_root: &Path) -> Result<PathBuf, OodleError> {
         .map_err(|_| OodleError::NotFound(game_root.to_path_buf()))?
         .filter_map(|e| e.ok())
         .map(|e| e.path())
-        .filter(|p| {
-            p.file_name()
-                .and_then(|n| n.to_str())
-                .map(|n| n.starts_with("oo2core_") && n.ends_with("_win64.dll"))
-                .unwrap_or(false)
-        })
+        .filter(|p| p.file_name().and_then(|n| n.to_str()).map(|n| n.starts_with("oo2core_") && n.ends_with("_win64.dll")).unwrap_or(false))
         .collect();
     found.sort();
     found.pop().ok_or_else(|| OodleError::NotFound(game_root.to_path_buf()))

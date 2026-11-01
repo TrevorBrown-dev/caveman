@@ -22,7 +22,7 @@ fn setup(name: &str) -> (Config, PathBuf) {
     let root = scratch(name);
     let decks = root.join("decks").join("000");
     std::fs::create_dir_all(&decks).unwrap();
-    for e in std::fs::read_dir(Path::new(GAME).join("Caveman Decks").join("000")).unwrap() {
+    for e in std::fs::read_dir(Path::new(GAME).join("Caveman").join("Decks").join("000")).unwrap() {
         let p = e.unwrap().path();
         if p.extension().map(|x| x == "png").unwrap_or(false) {
             std::fs::copy(&p, decks.join(p.file_name().unwrap())).unwrap();
@@ -38,6 +38,11 @@ fn setup(name: &str) -> (Config, PathBuf) {
         wheels: wheels.display().to_string(),
         out: root.join("mods").display().to_string(),
         cache: root.join("cache").display().to_string(),
+        trainer: String::new(),
+        author: String::new(),
+        attach: false,
+        ring_mb: 0,
+        plugins: serde_json::Value::Null,
     };
     (config, root)
 }
@@ -93,7 +98,11 @@ fn dump_mock_fixture() {
     let lib0 = library::scan(&config);
     let pick = |name: &str| lib0.decks.iter().find(|d| d.display == name).map(|d| d.source.clone());
     if let Some(src) = pick("000 - Dan Da Dan") {
-        library::save_settings(Path::new(&src), json!({"version": 1, "finish": {"kind": "holo", "mode": "cellular", "spot": true}, "shader": {"effect": "cycle", "speed": 0.4, "glow": 0.0}})).unwrap();
+        library::save_settings(
+            Path::new(&src),
+            json!({"version": 1, "finish": {"kind": "holo", "mode": "cellular", "spot": true}, "shader": {"effect": "cycle", "speed": 0.4, "glow": 0.0}}),
+        )
+        .unwrap();
     }
     bake::build(&config, true, |_| {}).unwrap();
     let lib = library::scan(&config);
@@ -107,7 +116,7 @@ fn dump_mock_fixture() {
         "library": lib,
         "config": config,
         "fitted": fitted,
-        "roots": [root.display().to_string(), std::path::PathBuf::from(GAME).join("Caveman Decks").display().to_string()],
+        "roots": [root.display().to_string(), std::path::PathBuf::from(GAME).join("Caveman").join("Decks").display().to_string()],
     });
     let out = Path::new(env!("CARGO_MANIFEST_DIR")).join("../mock/library.json");
     std::fs::create_dir_all(out.parent().unwrap()).unwrap();

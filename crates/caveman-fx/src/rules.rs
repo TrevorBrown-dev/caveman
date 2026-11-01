@@ -52,23 +52,87 @@ pub const INPUTS: [(&str, &str, Kind); 14] = [
 
 /// The flip tricks (`OnBoardRightGestureType`, the values of `flip`; knowledge/trick-triggers.md), by value.
 pub const FLIP_TRICKS: [&str; 59] = [
-    "none", "ollie", "kickflip", "heelflip", "popshuvit", "varialkickflip", "inwardheelflip", "fspopshuvit", "varialheelflip",
-    "hardflip", "360popshuvit", "360flip", "360inwardheelflip", "fs360popshuvit", "laserflip", "360hardflip", "nollie",
-    "n_kickflip", "n_heelflip", "n_popshuvit", "n_hardflip", "n_varialheelflip", "n_fspopshuvit", "n_varialkickflip",
-    "n_inwardheelflip", "n_fs360popshuvit", "n_360hardflip", "n_laserflip", "n_360popshuvit", "n_360flip", "n_360inwardheelflip",
-    "olliepop", "n_olliepop", "wallie", "fswallie", "bswallie", "impossible", "frontfoot_impossible", "n_impossible",
-    "n_backfoot_impossible", "lateflip", "heldfliptrick", "bonedollie", "kickflipunderflip", "heelflipunderflip",
-    "bspopshuvitunderflip", "fspopshuvitunderflip", "nolliekickflipunderflip", "nollieheelflipunderflip",
-    "nolliebspopshuvitunderflip", "nolliefspopshuvitunderflip", "hospitalflip", "flowerflip", "nolliehospitalflip",
-    "nollieflowerflip", "impossibleunderflip", "frontfootimpossibleunderflip", "nollieimpossibleunderflip",
+    "none",
+    "ollie",
+    "kickflip",
+    "heelflip",
+    "popshuvit",
+    "varialkickflip",
+    "inwardheelflip",
+    "fspopshuvit",
+    "varialheelflip",
+    "hardflip",
+    "360popshuvit",
+    "360flip",
+    "360inwardheelflip",
+    "fs360popshuvit",
+    "laserflip",
+    "360hardflip",
+    "nollie",
+    "n_kickflip",
+    "n_heelflip",
+    "n_popshuvit",
+    "n_hardflip",
+    "n_varialheelflip",
+    "n_fspopshuvit",
+    "n_varialkickflip",
+    "n_inwardheelflip",
+    "n_fs360popshuvit",
+    "n_360hardflip",
+    "n_laserflip",
+    "n_360popshuvit",
+    "n_360flip",
+    "n_360inwardheelflip",
+    "olliepop",
+    "n_olliepop",
+    "wallie",
+    "fswallie",
+    "bswallie",
+    "impossible",
+    "frontfoot_impossible",
+    "n_impossible",
+    "n_backfoot_impossible",
+    "lateflip",
+    "heldfliptrick",
+    "bonedollie",
+    "kickflipunderflip",
+    "heelflipunderflip",
+    "bspopshuvitunderflip",
+    "fspopshuvitunderflip",
+    "nolliekickflipunderflip",
+    "nollieheelflipunderflip",
+    "nolliebspopshuvitunderflip",
+    "nolliefspopshuvitunderflip",
+    "hospitalflip",
+    "flowerflip",
+    "nolliehospitalflip",
+    "nollieflowerflip",
+    "impossibleunderflip",
+    "frontfootimpossibleunderflip",
+    "nollieimpossibleunderflip",
     "nolliebackfootimpossibleunderflip",
 ];
 
 /// The grinds (`Enum.SkateGrindType`, the values of `grindtype`): base 1..17; FS = base, BS = base + 17,
 /// BF_FS = base + 34, BF_BS = base + 51.
 pub const GRINDS: [&str; 17] = [
-    "lip", "board", "50_50", "noseslide", "tailslide", "nosegrind", "5_0", "salad", "smith", "feeble", "willy", "overwilly",
-    "noseblunt", "blunt", "crook", "overcrook", "darkslide",
+    "lip",
+    "board",
+    "50_50",
+    "noseslide",
+    "tailslide",
+    "nosegrind",
+    "5_0",
+    "salad",
+    "smith",
+    "feeble",
+    "willy",
+    "overwilly",
+    "noseblunt",
+    "blunt",
+    "crook",
+    "overcrook",
+    "darkslide",
 ];
 
 /// The value of a trick or grind name (lower case), if it is one.
@@ -256,10 +320,12 @@ impl Parser<'_> {
 
     fn or(&mut self) -> Result<Expr, String> {
         let mut parts = vec![self.and()?];
-        while self.eat_op("||") || (self.is_word("or") && {
-            self.at += 1;
-            true
-        }) {
+        while self.eat_op("||")
+            || (self.is_word("or") && {
+                self.at += 1;
+                true
+            })
+        {
             parts.push(self.and()?);
         }
         Ok(if parts.len() == 1 { parts.pop().unwrap() } else { Expr::Or(parts) })
@@ -267,20 +333,24 @@ impl Parser<'_> {
 
     fn and(&mut self) -> Result<Expr, String> {
         let mut parts = vec![self.not()?];
-        while self.eat_op("&&") || (self.is_word("and") && {
-            self.at += 1;
-            true
-        }) {
+        while self.eat_op("&&")
+            || (self.is_word("and") && {
+                self.at += 1;
+                true
+            })
+        {
             parts.push(self.not()?);
         }
         Ok(if parts.len() == 1 { parts.pop().unwrap() } else { Expr::And(parts) })
     }
 
     fn not(&mut self) -> Result<Expr, String> {
-        if self.eat_op("!") || (self.is_word("not") && {
-            self.at += 1;
-            true
-        }) {
+        if self.eat_op("!")
+            || (self.is_word("not") && {
+                self.at += 1;
+                true
+            })
+        {
             return Ok(Expr::Not(Box::new(self.not()?)));
         }
         self.cmp()

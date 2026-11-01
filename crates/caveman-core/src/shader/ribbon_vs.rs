@@ -179,9 +179,7 @@ pub fn patch(ir: &str) -> Result<String, String> {
     let tangents = |s: &str| -> Vec<String> {
         ls.iter()
             .filter_map(|(_, l)| def(l))
-            .filter(|(_, rest)| {
-                rest.strip_prefix(&format!("fadd float {s}, ")).is_some_and(|v| matches!(numbered(v), Some((_, ""))))
-            })
+            .filter(|(_, rest)| rest.strip_prefix(&format!("fadd float {s}, ")).is_some_and(|v| matches!(numbered(v), Some((_, "")))))
             .map(|(n, _)| n.to_string())
             .collect()
     };
@@ -215,11 +213,7 @@ pub fn patch(ir: &str) -> Result<String, String> {
     let load_of = |reg: &str| -> Vec<(usize, String)> {
         ls.iter()
             .filter_map(|(o, l)| def(l).map(|(n, rest)| (*o, n, rest)))
-            .filter(|(_, _, rest)| {
-                rest.strip_prefix(LOAD)
-                    .and_then(numbered)
-                    .is_some_and(|(_, after)| after.starts_with(&format!(", i32 {reg})")))
-            })
+            .filter(|(_, _, rest)| rest.strip_prefix(LOAD).and_then(numbered).is_some_and(|(_, after)| after.starts_with(&format!(", i32 {reg})"))))
             .map(|(o, n, _)| (o, n.to_string()))
             .collect()
     };
@@ -227,10 +221,7 @@ pub fn patch(ir: &str) -> Result<String, String> {
     let mut cam = Vec::new();
     for c in 0..3 {
         let want = format!("extractvalue %dx.types.CBufRet.f32 {cam_load}, {c}");
-        cam.push(one(
-            ls.iter().filter_map(|(_, l)| def(l)).filter(|(_, rest)| *rest == want).map(|(n, _)| n.to_string()).collect(),
-            &format!("camera {c}"),
-        )?);
+        cam.push(one(ls.iter().filter_map(|(_, l)| def(l)).filter(|(_, rest)| *rest == want).map(|(n, _)| n.to_string()).collect(), &format!("camera {c}"))?);
     }
     let clip = one(load_of("421"), "view-projection")?.0;
     let mut rel = Vec::new();
@@ -275,8 +266,7 @@ pub fn patch(ir: &str) -> Result<String, String> {
 /// `nyanvspatch.build` minus the game access: the ribbon vertex program `original` (its `shaders/bytecode` payload)
 /// disassembled, patched, assembled, validated and signed, and wrapped again. Returns (payload, meta).
 pub fn build(dxc: &Dxc, original: &[u8]) -> Result<(Vec<u8>, [u8; 16]), ShaderError> {
-    let res = read_bytecode_resource(original)
-        .ok_or_else(|| ShaderError::Patch(format!("shaders/bytecode/{RIBBON_VS_PROGRAM}: not a bytecode resource")))?;
+    let res = read_bytecode_resource(original).ok_or_else(|| ShaderError::Patch(format!("shaders/bytecode/{RIBBON_VS_PROGRAM}: not a bytecode resource")))?;
     let ir = dxc.disassemble(res.dxbc)?;
     let patched = patch(&ir).map_err(|e| ShaderError::Patch(format!("shaders/bytecode/{RIBBON_VS_PROGRAM}: {e}")))?;
     let out = dxc.assemble(&patched, true)?;

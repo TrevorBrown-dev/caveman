@@ -202,7 +202,15 @@ pub fn teb_of(tid: u32) -> Option<usize> {
         return None;
     }
     let mut tbi: win::THREAD_BASIC_INFORMATION = unsafe { std::mem::zeroed() };
-    let status = unsafe { win::NtQueryInformationThread(h.0, 0, (&mut tbi as *mut win::THREAD_BASIC_INFORMATION).cast(), std::mem::size_of::<win::THREAD_BASIC_INFORMATION>() as u32, std::ptr::null_mut()) };
+    let status = unsafe {
+        win::NtQueryInformationThread(
+            h.0,
+            0,
+            (&mut tbi as *mut win::THREAD_BASIC_INFORMATION).cast(),
+            std::mem::size_of::<win::THREAD_BASIC_INFORMATION>() as u32,
+            std::ptr::null_mut(),
+        )
+    };
     (status == 0 && !tbi.TebBaseAddress.is_null()).then_some(tbi.TebBaseAddress as usize)
 }
 
@@ -217,7 +225,7 @@ mod tests {
         let mut ctx = vec![0u64; 3 + 64];
         let mut asset = vec![0u8; 0x80];
         // bool at page 2, offset 1758 (the riding state's slot in the probe), bound, Default 0
-        let offset = 1758usize.min(0x71b);
+        let offset = 1758usize;
         let handle = 2u32 | ((offset as u32) << 12) | (1 << 24);
         asset[0x28..0x2c].copy_from_slice(&handle.to_le_bytes());
         ctx[3 + 2] = page.as_ptr() as u64;

@@ -81,18 +81,12 @@ pub struct Layers(HashMap<String, Layer>);
 
 impl Layers {
     pub fn get(&mut self, m: &str) -> &Layer {
-        self.0
-            .entry(m.to_string())
-            .or_insert_with(|| Layer::open(&std::path::Path::new(GAME_ROOT).join("Mods").join(m), game()))
+        self.0.entry(m.to_string()).or_insert_with(|| Layer::open(&std::path::Path::new(GAME_ROOT).join("Mods").join(m), game()))
     }
 }
 
 /// A TOC file of the game (`kind` "game") or of a mod folder.
 pub fn toc_path(kind: &str, m: &str, rel: &str) -> PathBuf {
-    let base = if kind == "game" {
-        PathBuf::from(GAME_ROOT).join("Data").join("Win32")
-    } else {
-        PathBuf::from(GAME_ROOT).join("Mods").join(m).join("Win32")
-    };
+    let base = if kind == "game" { PathBuf::from(GAME_ROOT).join("Data").join("Win32") } else { PathBuf::from(GAME_ROOT).join("Mods").join(m).join("Win32") };
     rel.split('/').fold(base, |p, part| p.join(part))
 }

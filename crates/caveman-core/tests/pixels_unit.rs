@@ -17,7 +17,13 @@ fn pattern(w: usize, h: usize, c: usize) -> Image {
                 *v = match ch {
                     0 => (x * 255 / w.max(1)) as u8,
                     1 => (y * 255 / h.max(1)) as u8,
-                    2 => if (x / 8 + y / 8) % 2 == 0 { 230 } else { 20 },
+                    2 => {
+                        if (x / 8 + y / 8) % 2 == 0 {
+                            230
+                        } else {
+                            20
+                        }
+                    }
                     _ => ((x + y) % 256) as u8,
                 };
             }
@@ -47,7 +53,7 @@ fn bc7_round_trip_is_close() {
     let back = bcdec::decode(BcFormat::Bc7, &blocks, 64, 128);
     let q = psnr(&img, &back, 3);
     assert!(q > 35.0, "BC7 round trip PSNR {q}");
-    assert!(back.data.chunks_exact(4).all(|p| p[3] >= 254), "RGB input encodes opaque");
+    assert!(back.data.as_chunks::<4>().0.iter().all(|p| p[3] >= 254), "RGB input encodes opaque");
     let rgba = pattern(32, 32, 4);
     let back = bcdec::decode(BcFormat::Bc7, &bc7::encode(&rgba), 32, 32);
     assert!(psnr(&rgba, &back, 4) > 30.0);
@@ -61,7 +67,7 @@ fn bc1_round_trip_is_close() {
     assert!(q > 25.0, "BC1 round trip PSNR {q}");
     let flat = Image::filled(8, 8, &[10, 200, 30]);
     let back = bcdec::decode(BcFormat::Bc1, &bc1::encode(&flat), 8, 8);
-    assert!(back.data.chunks_exact(4).all(|p| p[3] == 255 && (p[1] as i32 - 200).abs() <= 4));
+    assert!(back.data.as_chunks::<4>().0.iter().all(|p| p[3] == 255 && (p[1] as i32 - 200).abs() <= 4));
 }
 
 #[test]
@@ -73,10 +79,7 @@ fn odd_sizes_pad_by_repeating_the_edge() {
 
 #[test]
 fn deck_mip_chain() {
-    assert_eq!(
-        mip_sizes(512, 2048, 12, 16),
-        vec![1048576, 262144, 65536, 16384, 4096, 1024, 256, 64, 32, 16, 16, 16]
-    );
+    assert_eq!(mip_sizes(512, 2048, 12, 16), vec![1048576, 262144, 65536, 16384, 4096, 1024, 256, 64, 32, 16, 16, 16]);
     assert_eq!(mip_sizes(512, 512, 10, 8)[..3], [131072, 32768, 8192]);
 }
 

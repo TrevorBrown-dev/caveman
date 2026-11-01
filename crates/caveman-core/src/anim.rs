@@ -211,7 +211,7 @@ fn arrange(n: usize, frame: (usize, usize), budget: usize) -> Option<(usize, usi
         let (w, h) = (cols * frame.0, rows * frame.1);
         if w <= MAX_SIDE && h <= MAX_SIDE && w * h <= budget {
             let key = (w * h, w.max(h), cols, rows);
-            if best.map_or(true, |b| (key.0, key.1) < (b.0, b.1)) {
+            if best.is_none_or(|b| (key.0, key.1) < (b.0, b.1)) {
                 best = Some(key);
             }
         }
@@ -326,10 +326,10 @@ pub fn atlas(clip: &Clip, plan: &Plan, wood: &Image) -> Result<Atlas, AnimError>
 /// Block 3 of the shader marker for an animated deck: R the frame count, G the frames a second, B the grid as
 /// 32 x log2(columns) + 4 x log2(rows) (all even, so BC7 keeps them exact; the shader divides by 4 and splits by 8).
 pub fn marker_block3(frames: usize, fps: u32, cols: usize, rows: usize) -> Result<[u8; 3], AnimError> {
-    if frames < 2 || frames > MAX_FRAMES || frames % 2 == 1 {
+    if !(2..=MAX_FRAMES).contains(&frames) || frames % 2 == 1 {
         return err(format!("{frames} frames: an animated deck has an even count, 2 to {MAX_FRAMES}"));
     }
-    if fps < MIN_FPS || fps > MAX_FPS || fps % 2 == 1 {
+    if !(MIN_FPS..=MAX_FPS).contains(&fps) || fps % 2 == 1 {
         return err(format!("{fps} frames a second: an even rate, {MIN_FPS} to {MAX_FPS}"));
     }
     if !cols.is_power_of_two() || cols > 32 || !rows.is_power_of_two() || rows > 32 {
@@ -488,7 +488,20 @@ fn run(cmd: &mut Command, what: &str) -> Result<Vec<u8>, AnimError> {
 
 pub fn video_probe(probe: &Path, file: &Path) -> Result<VideoInfo, AnimError> {
     let out = run(
-        Command::new(probe).args(["-v", "error", "-select_streams", "v:0", "-show_entries", "stream=width,height,avg_frame_rate,r_frame_rate,duration", "-show_entries", "format=duration", "-of", "json"]).arg(file),
+        Command::new(probe)
+            .args([
+                "-v",
+                "error",
+                "-select_streams",
+                "v:0",
+                "-show_entries",
+                "stream=width,height,avg_frame_rate,r_frame_rate,duration",
+                "-show_entries",
+                "format=duration",
+                "-of",
+                "json",
+            ])
+            .arg(file),
         "ffprobe",
     )?;
     let v: serde_json::Value = serde_json::from_slice(&out).map_err(|e| AnimError(format!("ffprobe output: {e}")))?;
@@ -517,10 +530,19 @@ pub fn decode_video(ffmpeg: &Path, file: &Path, info: &VideoInfo, fps: u32, fram
     let (w, h): (usize, usize) = (even(info.width as f64).parse().unwrap(), even(info.height as f64).parse().unwrap());
     let filter = format!("fps={fps},scale={w}:{h}:flags=lanczos");
     let out = run(
-        Command::new(ffmpeg)
-            .args(["-v", "error", "-nostdin", "-i"])
-            .arg(file)
-            .args(["-t", &format!("{max_seconds:.3}"), "-vf", &filter, "-frames:v", &frames.to_string(), "-f", "rawvideo", "-pix_fmt", "rgba", "-"]),
+        Command::new(ffmpeg).args(["-v", "error", "-nostdin", "-i"]).arg(file).args([
+            "-t",
+            &format!("{max_seconds:.3}"),
+            "-vf",
+            &filter,
+            "-frames:v",
+            &frames.to_string(),
+            "-f",
+            "rawvideo",
+            "-pix_fmt",
+            "rgba",
+            "-",
+        ]),
         "ffmpeg",
     )?;
     let frame_bytes = w * h * 4;
@@ -528,7 +550,8 @@ pub fn decode_video(ffmpeg: &Path, file: &Path, info: &VideoInfo, fps: u32, fram
     if count == 0 {
         return err("ffmpeg decoded no frames");
     }
-    let frames: Vec<Image> = (0..count).map(|k| Image { width: w, height: h, channels: 4, data: out[k * frame_bytes..(k + 1) * frame_bytes].to_vec() }).collect();
+    let frames: Vec<Image> =
+        (0..count).map(|k| Image { width: w, height: h, channels: 4, data: out[k * frame_bytes..(k + 1) * frame_bytes].to_vec() }).collect();
     let delay = (1000.0 / fps as f64).round() as u32;
     Ok(Clip { width: w, height: h, delays_ms: vec![delay; count], frames })
 }

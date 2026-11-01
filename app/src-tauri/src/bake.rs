@@ -20,10 +20,7 @@ const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 
 /// Whether Skate.exe is running (as launcher/ checks it).
 pub fn game_running() -> bool {
-    let out = Command::new("tasklist")
-        .args(["/FI", "IMAGENAME eq Skate.exe", "/NH", "/FO", "CSV"])
-        .creation_flags(CREATE_NO_WINDOW)
-        .output();
+    let out = Command::new("tasklist").args(["/FI", "IMAGENAME eq Skate.exe", "/NH", "/FO", "CSV"]).creation_flags(CREATE_NO_WINDOW).output();
     match out {
         Ok(o) => String::from_utf8_lossy(&o.stdout).to_ascii_lowercase().contains("\"skate.exe\""),
         Err(_) => false,
@@ -69,6 +66,24 @@ impl<F: FnMut(Value) + Send> Write for Events<F> {
     }
 }
 
+/// A reporter whose JSON events go to `send` as they come (the build's, a pack's).
+pub fn json_reporter(send: impl FnMut(Value) + Send + 'static) -> Reporter {
+    Reporter::to(Box::new(Events { pending: Vec::new(), send }), true)
+}
+
+/// Whether the mods on disk are what a build of the drop folders would write now (the build's own fingerprint),
+/// "stale" when not, "none" when Caveman has built nothing yet.
+pub fn mods_state(config: &Config) -> &'static str {
+    let o = config.options();
+    let (decks_dir, wheels_dir) = (o.decks_dir(), o.wheels_dir());
+    let stamp_file = o.mods_dir().join(&o.mod_name).join(caveman_cli::FINGERPRINT);
+    let Ok(on_disk) = std::fs::read_to_string(&stamp_file) else { return "none" };
+    match caveman_cli::fingerprint(&o, &decks_dir, &wheels_dir, &o.grips_dir(), &o.patterns_dir()) {
+        Ok(now) if now == on_disk => "up_to_date",
+        _ => "stale",
+    }
+}
+
 /// Runs the build for this configuration; `send` gets every event (`{"event": ...}`, as `caveman --json` prints).
 /// `force` builds even when nothing changed (no `--if-changed`).
 pub fn build(config: &Config, force: bool, send: impl FnMut(Value) + Send + 'static) -> Result<BuildResult, String> {
@@ -82,7 +97,7 @@ pub fn build(config: &Config, force: bool, send: impl FnMut(Value) + Send + 'sta
     }
     let mut o = config.options();
     o.if_changed = !force;
-    let mut report = Reporter::to(Box::new(Events { pending: Vec::new(), send }), true);
+    let mut report = json_reporter(send);
     let start = Instant::now();
     let outcome = caveman_cli::run(&o, &mut report).map_err(|e| e.to_string())?;
     let seconds = start.elapsed().as_secs_f64();
@@ -90,7 +105,7 @@ pub fn build(config: &Config, force: bool, send: impl FnMut(Value) + Send + 'sta
     Ok(match outcome {
         Outcome::UpToDate => BuildResult { outcome: "up_to_date", decks: 0, wheels: 0, shaders: "none", seconds, mods_dir },
         Outcome::Nothing => BuildResult { outcome: "nothing", decks: 0, wheels: 0, shaders: "none", seconds, mods_dir },
-        Outcome::Built { decks, wheels, shaders } => BuildResult {
+        Outcome::Built { decks, wheels, shaders, .. } => BuildResult {
             outcome: "built",
             decks,
             wheels,

@@ -82,7 +82,8 @@ fn dormant_selftest_and_unload() {
         let answer = proto::request(&pipe, &Request::Rules { rules: bad }, 2000).unwrap();
         assert_eq!(answer["ok"], false);
         assert!(answer["error"].as_str().unwrap().contains("rule 1 (fx.a)"), "{answer}");
-        let good: caveman_fx::rules::RulesFile = serde_json::from_str(r#"{"rules": [{"fx": "fx.a", "when": "grind && Animation/Dingo/Bool.State.Is.Push"}]}"#).unwrap();
+        let good: caveman_fx::rules::RulesFile =
+            serde_json::from_str(r#"{"rules": [{"fx": "fx.a", "when": "grind && Animation/Dingo/Bool.State.Is.Push"}]}"#).unwrap();
         let answer = proto::request(&pipe, &Request::Rules { rules: good }, 2000).unwrap();
         assert_eq!(answer["ok"], true, "{answer}");
         assert_eq!(answer["inputs"][1], "Animation/Dingo/Bool.State.Is.Push");
@@ -91,7 +92,8 @@ fn dormant_selftest_and_unload() {
         assert_eq!(proto::request_line(&pipe, "not json", 2000).unwrap()["ok"], false);
 
         // the real hook code, on the fake vtable, through the test exports
-        let install: unsafe extern "C" fn(*mut usize) -> i32 = unsafe { std::mem::transmute(win::GetProcAddress(module, c"cmfx_test_install".as_ptr().cast())) };
+        let install: unsafe extern "C" fn(*mut usize) -> i32 =
+            unsafe { std::mem::transmute(win::GetProcAddress(module, c"cmfx_test_install".as_ptr().cast())) };
         let map: extern "C" fn(usize, u32, u32) -> i32 = unsafe { std::mem::transmute(win::GetProcAddress(module, c"cmfx_test_map".as_ptr().cast())) };
         assert_eq!(map(0x1234_5670, 3, 1), -1, "nothing to map before the install");
         assert_eq!(unsafe { install(slot as *mut usize) }, 0);

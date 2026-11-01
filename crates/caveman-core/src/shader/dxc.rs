@@ -43,10 +43,7 @@ impl Iid {
             i += 1;
         }
         // data1 (4 bytes), data2 and data3 (2 each) are little-endian; data4 (8) as written
-        Iid([
-            hex[3], hex[2], hex[1], hex[0], hex[5], hex[4], hex[7], hex[6], hex[8], hex[9], hex[10], hex[11], hex[12],
-            hex[13], hex[14], hex[15],
-        ])
+        Iid([hex[3], hex[2], hex[1], hex[0], hex[5], hex[4], hex[7], hex[6], hex[8], hex[9], hex[10], hex[11], hex[12], hex[13], hex[14], hex[15]])
     }
 }
 
@@ -195,8 +192,7 @@ impl Dxc {
         let len = u32::try_from(data.len()).map_err(|_| ShaderError::Dxc("blob over 4 GiB".into()))?;
         let mut out = Com::null();
         unsafe {
-            let f: unsafe extern "system" fn(Unknown, *const c_void, u32, u32, *mut Unknown) -> Hresult =
-                std::mem::transmute(self.utils.method(6));
+            let f: unsafe extern "system" fn(Unknown, *const c_void, u32, u32, *mut Unknown) -> Hresult = std::mem::transmute(self.utils.method(6));
             check(f(self.utils.0, data.as_ptr().cast(), len, 0, &mut out.0), "CreateBlob")?;
         }
         Ok(out)
@@ -206,15 +202,12 @@ impl Dxc {
     fn operation(result: &Com) -> Result<(Vec<u8>, String, Hresult), ShaderError> {
         unsafe {
             let mut status: Hresult = 0;
-            let get_status: unsafe extern "system" fn(Unknown, *mut Hresult) -> Hresult =
-                std::mem::transmute(result.method(3));
+            let get_status: unsafe extern "system" fn(Unknown, *mut Hresult) -> Hresult = std::mem::transmute(result.method(3));
             check(get_status(result.0, &mut status), "GetStatus")?;
-            let get_result: unsafe extern "system" fn(Unknown, *mut Unknown) -> Hresult =
-                std::mem::transmute(result.method(4));
+            let get_result: unsafe extern "system" fn(Unknown, *mut Unknown) -> Hresult = std::mem::transmute(result.method(4));
             let mut blob = Com::null();
             let out = if get_result(result.0, &mut blob.0) >= 0 && !blob.is_null() { blob.blob_bytes() } else { Vec::new() };
-            let get_errors: unsafe extern "system" fn(Unknown, *mut Unknown) -> Hresult =
-                std::mem::transmute(result.method(5));
+            let get_errors: unsafe extern "system" fn(Unknown, *mut Unknown) -> Hresult = std::mem::transmute(result.method(5));
             let mut err = Com::null();
             let errors = if get_errors(result.0, &mut err.0) >= 0 && !err.is_null() { err.blob_bytes() } else { Vec::new() };
             Ok((out, text(&errors), status))
@@ -226,24 +219,19 @@ impl Dxc {
     fn result(result: &Com) -> Result<(Vec<u8>, String, Hresult), ShaderError> {
         unsafe {
             let mut status: Hresult = 0;
-            let get_status: unsafe extern "system" fn(Unknown, *mut Hresult) -> Hresult =
-                std::mem::transmute(result.method(3));
+            let get_status: unsafe extern "system" fn(Unknown, *mut Hresult) -> Hresult = std::mem::transmute(result.method(3));
             check(get_status(result.0, &mut status), "GetStatus")?;
-            let get_output: unsafe extern "system" fn(Unknown, u32, *const Iid, *mut Unknown, *mut Unknown) -> Hresult =
-                std::mem::transmute(result.method(7));
+            let get_output: unsafe extern "system" fn(Unknown, u32, *const Iid, *mut Unknown, *mut Unknown) -> Hresult = std::mem::transmute(result.method(7));
             let mut err = Com::null();
             let mut name = Com::null();
-            let errors = if get_output(result.0, DXC_OUT_ERRORS, &IID_IDXC_BLOB_UTF8, &mut err.0, &mut name.0) >= 0
-                && !err.is_null()
-            {
+            let errors = if get_output(result.0, DXC_OUT_ERRORS, &IID_IDXC_BLOB_UTF8, &mut err.0, &mut name.0) >= 0 && !err.is_null() {
                 err.blob_bytes()
             } else {
                 Vec::new()
             };
             let mut obj = Vec::new();
             if status >= 0 {
-                let get_result: unsafe extern "system" fn(Unknown, *mut Unknown) -> Hresult =
-                    std::mem::transmute(result.method(4));
+                let get_result: unsafe extern "system" fn(Unknown, *mut Unknown) -> Hresult = std::mem::transmute(result.method(4));
                 let mut out = Com::null();
                 check(get_result(result.0, &mut out.0), "GetResult")?;
                 if !out.is_null() {
@@ -259,8 +247,7 @@ impl Dxc {
         let buffer = DxcBuffer { ptr: dxbc.as_ptr().cast(), size: dxbc.len(), encoding: 0 };
         let mut result = Com::null();
         unsafe {
-            let f: unsafe extern "system" fn(Unknown, *const DxcBuffer, *const Iid, *mut Unknown) -> Hresult =
-                std::mem::transmute(self.compiler.method(4));
+            let f: unsafe extern "system" fn(Unknown, *const DxcBuffer, *const Iid, *mut Unknown) -> Hresult = std::mem::transmute(self.compiler.method(4));
             check(f(self.compiler.0, &buffer, &IID_IDXC_RESULT, &mut result.0), "Disassemble")?;
         }
         let (bytes, errors, status) = Dxc::result(&result)?;
@@ -285,16 +272,11 @@ impl Dxc {
         drop(src);
         let log = if log.is_null() { String::new() } else { unsafe { text(&log.blob_bytes()) }.trim().to_string() };
         if hr < 0 || module.is_null() {
-            return Ok(DxcOutput {
-                bytes: Vec::new(),
-                messages: format!("IR parse failed: HRESULT {:#010x} {log}", hr as u32),
-                ok: false,
-            });
+            return Ok(DxcOutput { bytes: Vec::new(), messages: format!("IR parse failed: HRESULT {:#010x} {log}", hr as u32), ok: false });
         }
         let mut result = Com::null();
         unsafe {
-            let f: unsafe extern "system" fn(Unknown, Unknown, *mut Unknown) -> Hresult =
-                std::mem::transmute(self.assembler.method(3));
+            let f: unsafe extern "system" fn(Unknown, Unknown, *mut Unknown) -> Hresult = std::mem::transmute(self.assembler.method(3));
             check(f(self.assembler.0, module.0, &mut result.0), "AssembleToContainer")?;
         }
         drop(module);
@@ -315,8 +297,7 @@ impl Dxc {
         let blob = self.blob(dxbc)?;
         let mut result = Com::null();
         unsafe {
-            let f: unsafe extern "system" fn(Unknown, Unknown, u32, *mut Unknown) -> Hresult =
-                std::mem::transmute(self.validator.method(3));
+            let f: unsafe extern "system" fn(Unknown, Unknown, u32, *mut Unknown) -> Hresult = std::mem::transmute(self.validator.method(3));
             check(f(self.validator.0, blob.0, if sign { VALIDATE_IN_PLACE } else { 0 }, &mut result.0), "Validate")?;
         }
         let (_, errors, status) = Dxc::operation(&result)?;
@@ -333,8 +314,7 @@ impl Dxc {
         let argc = u32::try_from(argv.len()).map_err(|_| ShaderError::Dxc("too many arguments".into()))?;
         let mut result = Com::null();
         unsafe {
-            type Compile =
-                unsafe extern "system" fn(Unknown, *const DxcBuffer, *const *const u16, u32, Unknown, *const Iid, *mut Unknown) -> Hresult;
+            type Compile = unsafe extern "system" fn(Unknown, *const DxcBuffer, *const *const u16, u32, Unknown, *const Iid, *mut Unknown) -> Hresult;
             let f: Compile = std::mem::transmute(self.compiler.method(3));
             check(f(self.compiler.0, &buffer, argv.as_ptr(), argc, null_mut(), &IID_IDXC_RESULT, &mut result.0), "Compile")?;
         }
@@ -355,9 +335,7 @@ pub fn container_parts(dxbc: &[u8]) -> Result<Vec<(String, usize, usize)>, Shade
         return Err(ShaderError::Patch("not a DXBC container".into()));
     }
     let u32_at = |o: usize| -> Result<u32, ShaderError> {
-        dxbc.get(o..o + 4)
-            .map(|b| u32::from_le_bytes([b[0], b[1], b[2], b[3]]))
-            .ok_or_else(|| ShaderError::Patch("truncated DXBC container".into()))
+        dxbc.get(o..o + 4).map(|b| u32::from_le_bytes([b[0], b[1], b[2], b[3]])).ok_or_else(|| ShaderError::Patch("truncated DXBC container".into()))
     };
     let count = u32_at(28)? as usize;
     let mut out = Vec::with_capacity(count);

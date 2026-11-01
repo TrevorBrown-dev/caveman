@@ -34,7 +34,9 @@ The print layer (UV1, the stencil) cannot reach the tee's shoulder yoke, side st
 
 ## One Caveman folder (Trevor, 2026-10-21)
 
-Move the drop folders out of the game root into one folder: `<game>\Caveman\Boards` (today `Caveman Decks`), `\Wheels` (`Caveman Wheels`), `\Tees` (new), `\Imports` (`Caveman Imports`), `\Archive` (`Caveman Archive`). Caveman moves the old folders on its first run (with a log line), so nothing breaks; item IDs do not change (a deck's name comes from its path inside the drop folder, not the root). Update Caveman.exe, the CLI defaults, the importer's default target, the app's settings and the docs. Do it once the agents editing the Caveman crates have landed; tees go straight into `Caveman\Tees`.
+**Done 2026-10-30** (`crates/caveman-cli/src/folders.rs`): `<game>\Caveman\Decks` (Trevor's word that day, over the `Boards` of this note), `\Wheels`, `\Imports`, `\Packs`, `\Templates`, `\Archive`, beside the FX DLL and the trainer. Every program adopts the old folders on its first run (`adopt_old_folders`: a rename, one log line each; the trainer only reads and looks in both places), a path saved in settings before the move follows it (`modern`), and item IDs do not change (a deck's name comes from its path inside the drop folder). Caveman.exe, the CLI, the importer, the pack generator, the app's settings and the docs updated. Tees, when they come, go straight into `Caveman\Tees`.
+
+The note as written on 2026-10-21: move the drop folders out of the game root into one folder: `<game>\Caveman\Boards` (today `Caveman Decks`), `\Wheels` (`Caveman Wheels`), `\Tees` (new), `\Imports` (`Caveman Imports`), `\Archive` (`Caveman Archive`). Caveman moves the old folders on its first run (with a log line), so nothing breaks; item IDs do not change (a deck's name comes from its path inside the drop folder, not the root). Update Caveman.exe, the CLI defaults, the importer's default target, the app's settings and the docs.
 
 ## Next up
 
@@ -113,3 +115,27 @@ Only item IDs travel between players; each game draws its own installed item for
 - More cosmetic kinds with the same machinery: grip tape, wheels, then clothing.
 - Spread large collections over several host bundles: every deck in one bundle loads together.
 - Understand why "Dan Da Dan" did not show in the deck list without the `000 - ` prefix while "Caveman Test Pattern" did (all data checked out; likely list ordering).
+
+## Open after 2026-10-22 (the live board: `docs/fx-hook-plan.md` r5k to r6a, `knowledge/live-board.md`)
+
+- **The board cam window** (`docs/board-cam.md`, 2026-10-24): the in-game cam is dropped for a see-through Tauri window fed by `caveman-trainer pose`; first live run pending (the camera-space convention, mirror and nose), then a remembered position and size, the ridden board's actual art, the wheels' colour, click-through while streaming.
+- **The old in-game board cam** (`docs/board-cam.md`): textureless in the game while the offline test passes (the game texture's format or the real mesh's normals, to be read from the r6g log line "board cam: the art bound"); then the real look (UVs from the meshes, the parts' textures found by name in the running game, a small PBR shader); and the depth copies stopping a second after every injection (`hook_calls` in `draw depth status`, the cam off/on A/B in `scratchpad/fx-r2/relaunch-r6g.sh`).
+
+- **The occlusion's last blinks**: single frames whose depth copy hides nothing or everything (the GPU's blink count, the marks in `%TEMP%\caveman-fx\marks`). r6a doubled the copy ring and guards slot reuse; if blinks remain, record each copy's viewport and the texel map in the diag entry and look there.
+- **The app's Live panel** is built and untried in the app itself (`app/src/components/Live.svelte`): first run, then rough edges. The hand-started OBS stream (a detached `board video obs`) is not the app's; the app's Stop ends only its own.
+- **Two material parameters unexplained**: a second iridescence value (`568ec558-...`, 0.25 on the holo host) and a pair of 1.0s (`a3f199b4-...`); both can be probed live with `board param`.
+- **Animated material values**: a colour cycle, a pulse on tricks through the fx states, a music-driven tint, all per tick through `material::engine_tick`.
+- **Zero-copy OBS**: the Spout plugin shares OBS's texture on the GPU; the DLL could copy it straight into the ridden copy (needs a D3D11 device to open the legacy shared handle).
+- **The producer's mip chain** (`rgba_chain_levels`, about 4 ms a frame at 256 x 1024) is the video path's biggest cost; a GPU mip generation or a faster box filter if 60 fps at 512 x 2048 is wanted.
+- **Resilience under memory pressure**: the game's own 16 GB spikes plus a tight commit limit crash it regardless of Caveman (`docs/skater-build-memory.md`: the staging ring is the candidate fix, r6r is the safe-to-try build; Trevor wants the game fixed, not the page file), and the memory watch's margin for every allocation of ours.
+- Small: `tests/board_host.rs` line 1046 is flaky (timing); a layer write whose targets already hold the art reports "nothing written" when a composite is refused for an unknown state (a false failure).
+
+## Open after 2026-10-30 (the launcher: `app/README.md`)
+
+- **The launcher is in** (0.2.0): the front page, Plugins, Studio with the switch per item and Packs, the Console, Play with the FX DLL attached by itself. Next: Trevor's background picture (`app/public/background.jpg`, 2880 x 1680), a real icon and an installer, a Changelogs link to GitHub, a shortcut for the app beside `Caveman.exe` in the game folder (the app runs from `target\release` today, with `caveman-trainer.exe` beside it).
+- **Packs, next steps:** a pack with shader effects needs the Caveman-Shaders mod as a dependency, which means publishing Caveman-Shaders on Thunderstore under a Caveman team and naming it in the pack's `dependencies`; a name check against Thunderstore's listing (`/c/reskate/api/v1/package/`), not only installed mods; a contact-sheet icon from several decks' thumbnails; deck ids stable across versions of a pack (they are deterministic per mod name and deck today: a renamed deck is a new item).
+- **The board cam window**: remember its position; the picture actually on the board (the OBS link's) instead of the selected deck's art; the wheels' colour; click-through while streaming; a kickflip checked against the screen for the camera-space convention, mirror and nose.
+- **Particle effects are parked** (Trevor, 2026-10-30: "under-cooked"): the Effects controls are out of the app and the FX test decks out of the default Caveman-FX build (`caveman fx --test-decks` brings them back). To come back with a UX for creating and managing effects; the pieces stay (`fxmod.rs`, the FX Library, `knowledge/effects-catalog.md`).
+- **The FX DLL's own install**: the app finds the trainer beside its exe or in `target\release`; the game folder's `Caveman\` copy is what `Caveman.exe` uses. One place for both, kept up to date by the app (copy the DLL and trainer beside the game at first run and after an update).
+- **Scoring**: how a trick's score is made (speed, air, rotation, repeats) is being researched into `knowledge/scoring.md` (an agent, 2026-10-30); a HUD or overlay that shows the breakdown live is the feature that could follow.
+- **ReSkate's plugin API as a second route** for the exotic features: `board.parameters` writes the same material values as the DLL's `board tint`/`holotint`, `reskate.viewmodel` draws a rigged model in front of the camera. A Caveman plugin (Luau, approved by the player, no DLL) could carry the live tint and a board cam without injection; textures and the OBS link stay native.

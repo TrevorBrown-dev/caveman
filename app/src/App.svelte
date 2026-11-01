@@ -1,43 +1,34 @@
 <script lang="ts">
+  // The shell: the launcher's front page (Home) over a background picture, and the pages that slide over it: Plugins,
+  // Studio and the Console. It owns the config, the library, the game's state (polled), and the FX DLL's life while the
+  // app is open: when the game runs without the DLL and the setting says so, the DLL goes in; once it answers, the
+  // plugins marked to start with the game are started, once per game session.
   import { onMount } from 'svelte';
-  import Library from './components/Library.svelte';
-  import Editor from './components/Editor.svelte';
-  import PreviewPane from './components/PreviewPane.svelte';
-  import BuildLog from './components/BuildLog.svelte';
+  import Home from './components/Home.svelte';
+  import Plugins from './components/Plugins.svelte';
+  import Studio from './components/Studio.svelte';
+  import Console from './components/Console.svelte';
   import SettingsDialog from './components/SettingsDialog.svelte';
   import * as api from './lib/api';
-  import { sameModel, toModel, toSettings, type EditModel } from './lib/effects';
-  import type { BuildEvent, BuildResult, Config, Library as Lib, LibraryItem } from './lib/types';
+  import * as live from './lib/live';
+  import { ENTRIES } from './lib/changelog';
+  import { pluginsOf, type Config, type LauncherStatus, type Library as Lib, type PluginsConfig } from './lib/types';
 
+  type View = 'home' | 'plugins' | 'studio' | 'console';
+  let view = $state<View>('home');
   let config = $state<Config | null>(null);
   let library = $state<Lib | null>(null);
-  let selected = $state<LibraryItem | null>(null);
-  let deck = $state<LibraryItem | null>(null);
-  let wheel = $state<LibraryItem | null>(null);
-  let libraryTab = $state<'deck' | 'wheel'>('deck');
-  /** Unsaved edits per deck (by PNG path), kept while moving between decks. */
-  let drafts = $state<Record<string, EditModel>>({});
-  let art = $state<ImageBitmap | null>(null);
-  let artLoading = $state(false);
-  let fitNotes = $state<string[]>([]);
-  let wheelFace = $state<ImageBitmap | null>(null);
-  let autoColour = $state('#ffffff');
-  let saving = $state(false);
-  let building = $state(false);
-  let buildEvents = $state<BuildEvent[]>([]);
-  let buildResult = $state<BuildResult | null>(null);
-  let buildError = $state<string | null>(null);
-  let logOpen = $state(false);
+  let status = $state<LauncherStatus | null>(null);
+  let version = $state('');
   let gameRunning = $state(false);
+  let injected = $state<boolean | null>(null);
+  let playing = $state(false);
   let showSettings = $state(false);
-  let initialMode = $state<'showcase' | 'ride'>('showcase');
+  let showChangelogs = $state(false);
   let toast: { text: string; kind: 'info' | 'error' } | null = $state(null);
   let toastTimer: ReturnType<typeof setTimeout> | null = null;
 
-  const model: EditModel | null = $derived(deck ? drafts[deck.source] ?? toModel(deck.settings) : null);
-  const dirty = $derived(!!deck && !!drafts[deck.source] && !sameModel(drafts[deck.source], toModel(deck.settings)));
-  const liveSettings = $derived(deck && model ? toSettings(model, deck.settings) : null);
-  const unsaved = $derived(Object.keys(drafts).length);
+  const plugins: PluginsConfig = $derived(pluginsOf(config));
 
   function say(text: string, kind: 'info' | 'error' = 'info'): void {
     toast = { text, kind };
@@ -48,114 +39,14 @@
   async function refresh(): Promise<void> {
     try {
       library = await api.library();
-      // keep the selection (and its updated entry) across refreshes
-      const find = (item: LibraryItem | null): LibraryItem | null =>
-        item ? ([...(library?.decks ?? []), ...(library?.wheels ?? [])].find((i) => i.source === item.source) ?? null) : null;
-      selected = find(selected);
-      deck = find(deck);
-      wheel = find(wheel);
-      if (!deck && library.decks.length > 0 && !selected) select(library.decks[0]);
     } catch (e) {
       say(`Could not read the drop folders: ${String(e)}`, 'error');
     }
   }
 
-  async function select(item: LibraryItem): Promise<void> {
-    selected = item;
-    if (item.kind === 'deck') {
-      if (deck?.source === item.source) return;
-      deck = item;
-      artLoading = true;
-      try {
-        const fitted = await api.fittedArt(item.source);
-        if (deck?.source !== item.source) return;
-        fitNotes = fitted.notes;
-        art = await api.imageBitmap(fitted.path);
-      } catch (e) {
-        art = null;
-        say(`Could not load ${item.display}: ${String(e)}`, 'error');
-      } finally {
-        artLoading = false;
-      }
-    } else {
-      wheel = item;
-      try {
-        wheelFace = await api.imageBitmap(item.source);
-      } catch {
-        wheelFace = null;
-      }
-    }
-  }
-
-  function edit(m: EditModel): void {
-    if (!deck) return;
-    if (sameModel(m, toModel(deck.settings))) {
-      const { [deck.source]: _, ...rest } = drafts;
-      drafts = rest;
-    } else {
-      drafts = { ...drafts, [deck.source]: m };
-    }
-  }
-
-  async function save(): Promise<void> {
-    if (!deck || !model) return;
-    saving = true;
+  async function readStatus(): Promise<void> {
     try {
-      await api.saveSettings(deck.source, toSettings(model, deck.settings));
-      const { [deck.source]: _, ...rest } = drafts;
-      drafts = rest;
-      await refresh();
-      say(`Saved ${deck?.display ?? 'the deck'}'s settings`);
-    } catch (e) {
-      say(`Not saved: ${String(e)}`, 'error');
-    } finally {
-      saving = false;
-    }
-  }
-
-  function revert(): void {
-    if (!deck) return;
-    const { [deck.source]: _, ...rest } = drafts;
-    drafts = rest;
-  }
-
-  async function clear(): Promise<void> {
-    if (!deck) return;
-    try {
-      await api.clearSettings(deck.source);
-      const { [deck.source]: _, ...rest } = drafts;
-      drafts = rest;
-      await refresh();
-      say('Removed the settings file: the file name decides again');
-    } catch (e) {
-      say(String(e), 'error');
-    }
-  }
-
-  async function runBuild(): Promise<void> {
-    if (building) return;
-    if (unsaved > 0) say(`${unsaved} deck(s) have unsaved changes: the build uses their saved settings`);
-    building = true;
-    buildEvents = [];
-    buildError = null;
-    buildResult = null;
-    logOpen = true;
-    try {
-      buildResult = await api.build(false, (e) => (buildEvents = [...buildEvents, e]));
-      await refresh();
-      if (buildResult.outcome === 'built') say(`Built ${buildResult.decks} deck(s) in ${buildResult.seconds.toFixed(1)} s`);
-    } catch (e) {
-      buildError = String(e);
-      say(buildError, 'error');
-    } finally {
-      building = false;
-    }
-  }
-
-  async function play(): Promise<void> {
-    try {
-      await api.launch();
-      say('Starting ReSkate...');
+      status = await api.launcherStatus();
     } catch (e) {
       say(String(e), 'error');
     }
@@ -165,51 +56,167 @@
     try {
       config = await api.saveConfig(c);
       showSettings = false;
-      deck = null;
-      wheel = null;
-      selected = null;
-      art = null;
       await refresh();
+      await readStatus();
     } catch (e) {
       say(String(e), 'error');
     }
   }
 
+  function savePlugins(p: PluginsConfig): void {
+    if (!config) return;
+    const before = plugins;
+    void saveConfig({ ...config, plugins: p as unknown as Record<string, unknown> });
+    // a plugin's checkbox is its switch: ticked while the game runs with the DLL in, it starts now; unticked, it stops
+    for (const id of ['bars', 'obs', 'boardcam'] as const) {
+      if (p[id].autostart === before[id].autostart) continue;
+      if (p[id].autostart) {
+        if (injected === true) startPlugin(id, p).catch((e) => say(String(e), 'error'));
+      } else {
+        stopPlugin(id).catch((e) => say(String(e), 'error'));
+      }
+    }
+  }
+
+  async function stopPlugin(id: 'bars' | 'obs' | 'boardcam'): Promise<void> {
+    if (id === 'boardcam') {
+      await live.boardcamClose();
+    } else if (id === 'obs') {
+      if (await live.videoRunning()) await live.videoStop();
+    } else if (injected === true) {
+      await live.live(['bars', 'off']);
+    }
+  }
+
+  /** Starts one plugin as its "start with the game" switch would. Returns what was started, or null. */
+  async function startPlugin(id: 'bars' | 'obs' | 'boardcam', p: PluginsConfig): Promise<string | null> {
+    if (id === 'bars') {
+      await live.live(['bars', 'on']);
+      return 'the soundbars';
+    }
+    if (id === 'obs') {
+      if (await live.videoRunning()) return null;
+      const source = p.obs.source === 'obs' ? 'obs' : p.obs.file.trim();
+      if (!source) return null;
+      await live.videoStart([source, '--rotate', p.obs.rotate, '--fit', p.obs.fit]);
+      return 'the OBS link';
+    }
+    // (the window reads the picture on the board itself: `boardArt`)
+    await live.boardcamOpen({ ...p.boardcam, art: null, rate: 60 });
+    return 'the board cam window';
+  }
+
+  // ---- the game's state, and what follows from it
+  let sessionAttached = false;
+  let sessionStarted = false;
+  /** The picture last put on the board has been put back in this game session (or there was none to put back). */
+  let reapplied = false;
+  let wasRunning = false;
   async function poll(): Promise<void> {
+    let running = false;
     try {
-      gameRunning = await api.gameRunning();
+      running = await api.gameRunning();
     } catch {
-      gameRunning = false;
+      running = false;
+    }
+    gameRunning = running;
+    if (!running) {
+      injected = null;
+      if (wasRunning) {
+        sessionAttached = false;
+        sessionStarted = false;
+        reapplied = false;
+        void readStatus();
+      }
+      wasRunning = false;
+      return;
+    }
+    wasRunning = true;
+    let now: boolean | null = null;
+    let brief: live.LiveStatus['brief'] = undefined;
+    try {
+      const s = await live.status(false);
+      now = s.injected;
+      brief = s.brief;
+    } catch {
+      now = null;
+    }
+    const before = injected;
+    injected = now;
+    // the picture last put on the board comes back by itself in a new game session (Trevor, 2026-10-30): once the
+    // DLL's board module is up with nothing on the board yet (its light status says so; DLLs from that evening on)
+    const remembered = plugins.live.lastDeck;
+    if (now === true && !reapplied && remembered && brief && typeof brief === 'object' && brief.art === null) {
+      reapplied = true;
+      try {
+        const r = await live.live(remembered.args);
+        if (r.ok) say(`Back on the board: ${remembered.label}`);
+        else say(`${remembered.label} could not go back on the board: ${r.text}`, 'error');
+      } catch (e) {
+        say(`${remembered.label} could not go back on the board: ${String(e)}`, 'error');
+      }
+    }
+    if (now === false && config?.attach && !sessionAttached && !api.isMock) {
+      sessionAttached = true;
+      try {
+        await api.attachDll();
+        say('The game is running: putting the FX DLL in');
+      } catch (e) {
+        say(`FX DLL: ${String(e)}`, 'error');
+      }
+    }
+    if (now === true && before !== true && !sessionStarted) {
+      sessionStarted = true;
+      await autostart();
+    }
+  }
+
+  /** The plugins marked to start with the game, once the DLL answers. */
+  async function autostart(): Promise<void> {
+    const p = plugins;
+    const started: string[] = [];
+    try {
+      for (const id of ['bars', 'obs', 'boardcam'] as const) {
+        if (!p[id].autostart) continue;
+        const what = await startPlugin(id, p);
+        if (what) started.push(what);
+      }
+    } catch (e) {
+      say(`Starting the plugins: ${String(e)}`, 'error');
+    }
+    if (started.length > 0) say(`Started ${started.join(', ')}`);
+  }
+
+  async function play(): Promise<void> {
+    if (playing || gameRunning) return;
+    playing = true;
+    try {
+      const built = await api.build(false, () => {});
+      if (built.outcome === 'built') say(`Built ${built.decks} deck(s) and ${built.wheels} wheel(s)`);
+      const attach = await api.launch();
+      sessionAttached = !!attach;
+      say(attach ? 'Starting ReSkate; the FX DLL goes in once the game is up' : 'Starting ReSkate...');
+      await readStatus();
+    } catch (e) {
+      say(String(e), 'error');
+    } finally {
+      playing = false;
     }
   }
 
   function keys(e: KeyboardEvent): void {
-    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
-      e.preventDefault();
-      if (dirty) save();
-    }
+    if (e.key === 'Escape' && view !== 'home' && !showSettings && !showChangelogs) view = 'home';
   }
 
   onMount(() => {
     (async () => {
       config = await api.loadConfig();
+      version = await api.appVersion();
       await refresh();
-      // ?deck=<part of a name> selects that deck, ?wheel=<part> that wheel, ?mode=ride starts riding (screenshots, links)
+      await readStatus();
       const params = new URLSearchParams(window.location.search);
-      const want = params.get('deck')?.toLowerCase();
-      const match = want ? library?.decks.find((d) => d.display.toLowerCase().includes(want)) : undefined;
-      if (match) {
-        deck = null;
-        await select(match);
-      }
-      const wantWheel = params.get('wheel')?.toLowerCase();
-      const wheelMatch = wantWheel ? library?.wheels.find((w) => w.display.toLowerCase().includes(wantWheel)) : undefined;
-      if (wheelMatch) {
-        libraryTab = 'wheel';
-        await select(wheelMatch);
-      }
-      if (params.get('mode') === 'ride') initialMode = 'ride';
-      if (params.get('log') === '1') logOpen = true;
+      const want = params.get('page');
+      if (want === 'plugins' || want === 'studio' || want === 'console') view = want;
       await poll();
     })();
     const timer = setInterval(poll, 4000);
@@ -220,51 +227,30 @@
 <svelte:window onkeydown={keys} />
 
 <div class="app">
-  <header class="top">
-    <div class="brand">
-      <span class="logo" aria-hidden="true"></span>
-      <span>Caveman</span>
-      {#if api.isMock}<span class="mock">mock data</span>{/if}
+  <div class="bg" aria-hidden="true"></div>
+  {#if view === 'home'}
+    <Home {status} {gameRunning} {injected} {version} {plugins} {playing} onopen={(v) => (view = v)} onplay={play} onsettings={() => (showSettings = true)} onchangelogs={() => (showChangelogs = true)} />
+    {#if api.isMock}<span class="mock">mock data</span>{/if}
+  {:else}
+    <div class="page">
+      <header class="page-head">
+        <button class="back" onclick={() => (view = 'home')} title="Back to the front page (Escape)">&larr; Back</button>
+        <h1>{view === 'plugins' ? 'Plugins' : view === 'studio' ? 'Studio' : 'Console'}</h1>
+        <span class="state" class:running={gameRunning}>{gameRunning ? (injected ? 'Game running, FX DLL in' : 'Game running') : 'Game closed'}</span>
+        <div class="spacer"></div>
+        <button class="ghost" onclick={() => (showSettings = true)}>Settings</button>
+      </header>
+      <div class="page-body">
+        {#if view === 'plugins' && config}
+          <Plugins {config} {plugins} {library} {gameRunning} {injected} onplugins={savePlugins} onconfig={saveConfig} onsay={say} onattach={() => api.attachDll().then(() => say('Putting the FX DLL in'), (e) => say(String(e), 'error'))} />
+        {:else if view === 'studio' && config}
+          <Studio {config} {library} {gameRunning} onrefresh={refresh} onsay={say} onbuilt={readStatus} />
+        {:else if view === 'console'}
+          <Console onsay={say} />
+        {/if}
+      </div>
     </div>
-    <button class="ghost folder mono" title="Change folders" onclick={() => (showSettings = true)}>{config?.game ?? ''}</button>
-    <span class="status" class:running={gameRunning}>{gameRunning ? 'Game running' : 'Game closed'}</span>
-    <div class="spacer"></div>
-    <button class="ghost" onclick={refresh} title="Read the drop folders again">Refresh</button>
-    <button class="primary" disabled={building || gameRunning} title={gameRunning ? 'Close the game to build' : 'Build the decks and wheels into the mods'} onclick={runBuild}>
-      {building ? 'Building...' : 'Build'}
-    </button>
-    <button disabled={gameRunning || building} onclick={play} title="Start ReSkate">Play</button>
-    <button class="ghost" onclick={() => (showSettings = true)} aria-label="Settings" title="Settings">Settings</button>
-  </header>
-
-  <main>
-    <Library {library} selected={selected?.source ?? null} onselect={select} bind:tab={libraryTab} />
-    <div class="centre">
-      <PreviewPane
-        {art}
-        settings={liveSettings}
-        wheelColour={wheel?.colour ?? '#f2efe8'}
-        {wheelFace}
-        loading={artLoading}
-        title={deck ? `${deck.display}${dirty ? '  (unsaved)' : ''}` : 'No deck selected'}
-        onautocolour={(c) => (autoColour = c)}
-        mode={initialMode}
-      />
-      <BuildLog events={buildEvents} result={buildResult} error={buildError} {building} open={logOpen} ontoggle={() => (logOpen = !logOpen)} />
-    </div>
-    <Editor
-      item={selected?.kind === 'wheel' ? selected : deck}
-      model={selected?.kind === 'wheel' ? null : model}
-      {dirty}
-      {saving}
-      {autoColour}
-      {fitNotes}
-      onchange={edit}
-      onsave={save}
-      onrevert={revert}
-      onclear={clear}
-    />
-  </main>
+  {/if}
 
   {#if toast}
     <div class="toast" class:error={toast.kind === 'error'} role="status">{toast.text}</div>
@@ -272,74 +258,97 @@
   {#if showSettings && config}
     <SettingsDialog {config} onsave={saveConfig} onclose={() => (showSettings = false)} />
   {/if}
+  {#if showChangelogs}
+    <dialog class="changelogs" open>
+      <header>
+        <h2>Changelogs</h2>
+        <button class="ghost" onclick={() => (showChangelogs = false)}>Close</button>
+      </header>
+      <div class="entries">
+        {#each ENTRIES as e (e.version)}
+          <section>
+            <h3>{e.version}{e.date ? ` (${e.date})` : ''}</h3>
+            <ul>
+              {#each e.bullets as b, i (i)}<li>{b}</li>{/each}
+            </ul>
+          </section>
+        {/each}
+      </div>
+    </dialog>
+  {/if}
 </div>
 
 <style>
   .app {
-    display: grid;
-    grid-template-rows: 54px 1fr;
+    position: relative;
     height: 100%;
+    overflow: hidden;
   }
-  .top {
+  /* The background: public/background.jpg when there is one (a 12:7 picture, 2880 x 1680 fits every size this
+     window takes), over a dark gradient that shows until then. */
+  .bg {
+    position: absolute;
+    inset: 0;
+    background:
+      url('/background.jpg') center / cover no-repeat,
+      radial-gradient(1200px 700px at 70% 30%, #3a2a3f 0%, #1a1520 55%, #0d0b10 100%);
+  }
+  .bg::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(90deg, rgba(8, 7, 10, 0.55) 0%, rgba(8, 7, 10, 0.15) 45%, rgba(8, 7, 10, 0.35) 100%);
+  }
+  .mock {
+    position: absolute;
+    top: 10px;
+    right: 14px;
+    font-size: 11px;
+    padding: 2px 8px;
+    border-radius: 999px;
+    background: rgba(243, 198, 75, 0.2);
+    color: var(--warn);
+  }
+  .page {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    grid-template-rows: 52px minmax(0, 1fr);
+    background: rgba(18, 16, 22, 0.97);
+  }
+  .page-head {
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: 14px;
     padding: 0 14px;
     background: var(--panel);
     border-bottom: 1px solid var(--line);
   }
-  .brand {
-    display: flex;
-    align-items: center;
-    gap: 9px;
-    font-weight: 700;
-    font-size: 16px;
-    letter-spacing: 0.01em;
+  .back {
+    font-weight: 600;
   }
-  .logo {
-    width: 14px;
-    height: 34px;
-    border-radius: 7px;
-    background: linear-gradient(180deg, #ff3b30 0 16%, #ff9500 16% 33%, #ffd60a 33% 50%, #34c759 50% 66%, #0a84ff 66% 83%, #8c50ff 83%);
-    transform: rotate(-18deg);
+  .page-head h1 {
+    margin: 0;
+    font-size: 20px;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
   }
-  .mock {
-    font-size: 11px;
-    font-weight: 500;
-    padding: 2px 8px;
-    border-radius: 999px;
-    background: rgba(243, 198, 75, 0.15);
-    color: var(--warn);
-  }
-  .folder {
-    max-width: 340px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  .status {
+  .state {
     font-size: 12px;
     padding: 3px 10px;
     border-radius: 999px;
     background: rgba(79, 209, 139, 0.12);
     color: var(--good);
   }
-  .status.running {
-    background: rgba(255, 107, 107, 0.14);
-    color: var(--bad);
+  .state.running {
+    background: rgba(43, 167, 255, 0.14);
+    color: #7cc8ff;
   }
   .spacer {
     flex: 1;
   }
-  main {
-    display: grid;
-    grid-template-columns: 320px minmax(0, 1fr) 360px;
-    min-height: 0;
-  }
-  .centre {
-    display: grid;
-    grid-template-rows: minmax(0, 1fr) auto;
-    min-width: 0;
+  .page-body {
     min-height: 0;
   }
   .toast {
@@ -353,14 +362,54 @@
     background: var(--raised);
     border: 1px solid var(--line-strong);
     box-shadow: var(--shadow);
+    z-index: 5;
   }
   .toast.error {
     border-color: rgba(255, 107, 107, 0.6);
     color: #ffd2d2;
   }
-  @media (max-width: 1180px) {
-    main {
-      grid-template-columns: 270px minmax(0, 1fr) 320px;
-    }
+  .changelogs {
+    position: fixed;
+    inset: auto;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: min(720px, calc(100vw - 48px));
+    max-height: calc(100vh - 80px);
+    display: flex;
+    flex-direction: column;
+    padding: 0;
+    border: 1px solid var(--line-strong);
+    border-radius: var(--radius);
+    background: var(--panel);
+    color: var(--text);
+    box-shadow: var(--shadow);
+    z-index: 6;
+  }
+  .changelogs header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 18px;
+    border-bottom: 1px solid var(--line);
+  }
+  .changelogs h2 {
+    margin: 0;
+    font-size: 18px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  .entries {
+    overflow-y: auto;
+    padding: 6px 18px 18px;
+  }
+  .entries h3 {
+    margin: 14px 0 6px;
+    font-size: 14px;
+  }
+  .entries ul {
+    margin: 0;
+    padding-left: 20px;
+    color: var(--text-dim);
   }
 </style>

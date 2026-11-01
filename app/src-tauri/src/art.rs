@@ -1,5 +1,5 @@
 //! The deck art as the build puts it on the deck (caveman_core::build::fit_art: cover-cropped to 1:4, turned upright
-//! when drawn sideways, flattened onto the Natural Blank wood), for the 3D preview. Written once per PNG version into
+//! when drawn sideways, flattened onto the deck's colour or the Natural Blank wood), for the 3D preview. Written once per PNG version into
 //! the app's cache folder; the game is opened once (its wood texture is the backdrop).
 
 use std::collections::hash_map::DefaultHasher;
@@ -40,6 +40,10 @@ pub fn fitted(state: &ArtState, game_dir: &Path, source: &Path, cache_dir: &Path
     meta.len().hash(&mut h);
     meta.modified().ok().hash(&mut h);
     game_dir.hash(&mut h);
+    let paint = caveman_cli::names::deck_paint(source);
+    if paint.is_some() {
+        paint.hash(&mut h);
+    }
     let out = cache_dir.join(format!("{:016x}.png", h.finish()));
     let notes_file = out.with_extension("txt");
     if out.is_file() {
@@ -48,7 +52,7 @@ pub fn fitted(state: &ArtState, game_dir: &Path, source: &Path, cache_dir: &Path
     }
     let wood = state.wood(game_dir)?;
     let img = Image::read_png(source).map_err(|e| format!("{}: {e}", source.display()))?;
-    let (art, notes) = build::fit_art(&img, &wood).map_err(|e| e.to_string())?;
+    let (art, notes) = build::fit_art_on(&img, &wood, paint).map_err(|e| e.to_string())?;
     std::fs::create_dir_all(cache_dir).map_err(|e| e.to_string())?;
     art.write_png(&out).map_err(|e| e.to_string())?;
     let _ = std::fs::write(&notes_file, notes.join("\n"));

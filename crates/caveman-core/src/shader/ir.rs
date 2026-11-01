@@ -281,11 +281,7 @@ pub fn line_anchored(text: &str, target: &str) -> Vec<(usize, usize)> {
         while w > 0 && is_space(b[w - 1]) {
             w -= 1;
         }
-        let s = if w == 0 || b[w - 1] == b'\n' {
-            Some(w)
-        } else {
-            b[w..p].iter().position(|&c| c == b'\n').map(|n| w + n + 1)
-        };
+        let s = if w == 0 || b[w - 1] == b'\n' { Some(w) } else { b[w..p].iter().position(|&c| c == b'\n').map(|n| w + n + 1) };
         if let Some(s) = s {
             out.push((s, p));
         }

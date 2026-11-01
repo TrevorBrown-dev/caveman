@@ -3,11 +3,14 @@
 //! rainbow trail, the game's deck and ribbon programs are patched into a second mod (`Caveman-Shaders`). Caveman.exe
 //! (`launcher/`) runs the same build in process before it starts ReSkate.
 
+pub mod folders;
 pub mod fx;
 pub mod importer;
 pub mod items;
 pub mod names;
+pub mod pack;
 pub mod report;
+pub mod selection;
 
 use std::collections::HashMap;
 use std::error::Error;
@@ -16,7 +19,7 @@ use std::sync::{Arc, OnceLock};
 use std::time::UNIX_EPOCH;
 
 use caveman_core::anim;
-use caveman_core::build::{self, BuildOptions, DeckLayers, DeckSource, DeckSpec, WheelSource, WheelSpec};
+use caveman_core::build::{self, BuildOptions, CutoutSpec, DeckLayers, DeckSource, DeckSpec, GripSpec, WheelSource, WheelSpec};
 use caveman_core::effects::{self, BoardEffect, DeckEffects, Finish, Layers};
 use caveman_core::game::Game;
 use caveman_core::image::Image;
@@ -46,10 +49,14 @@ const PREVIEW_MASK: &[u8] = include_bytes!("../assets/deck_preview_mask.png");
 #[derive(Clone, Debug)]
 pub struct Options {
     pub game: PathBuf,
-    /// The deck PNGs (default `<game>\Caveman Decks`).
+    /// The deck PNGs (default `<game>\Caveman\Decks`; folders.rs).
     pub decks: Option<PathBuf>,
-    /// The wheel PNGs (default `<game>\Caveman Wheels`).
+    /// The wheel PNGs (default `<game>\Caveman\Wheels`).
     pub wheels: Option<PathBuf>,
+    /// The grips (default `<game>\Caveman\Grips`): pictures printed on the grip and plain colours (names::scan_grips).
+    pub grips: Option<PathBuf>,
+    /// The grip patterns (default `<game>\Caveman\Patterns`): cutout masks (names::scan_patterns).
+    pub patterns: Option<PathBuf>,
     pub mod_name: String,
     /// Where the mods are written (default `<game>\Mods`).
     pub out: Option<PathBuf>,
@@ -62,6 +69,11 @@ pub struct Options {
     pub cache: Option<PathBuf>,
     /// Build every deck and wheel again instead of reusing unchanged ones from the item cache.
     pub no_cache: bool,
+    /// The mod's author in its manifest.json (default "Caveman").
+    pub author: Option<String>,
+    /// Installed mods whose items do not count as taken (besides the mod being built): a pack's items may already be
+    /// in the personal Caveman-Decks under the same names.
+    pub skip_mods: Vec<String>,
 }
 
 impl Options {
@@ -70,6 +82,8 @@ impl Options {
             game: game.into(),
             decks: None,
             wheels: None,
+            grips: None,
+            patterns: None,
             mod_name: MOD.into(),
             out: None,
             prefix: String::new(),
@@ -77,15 +91,25 @@ impl Options {
             json: false,
             cache: None,
             no_cache: false,
+            author: None,
+            skip_mods: Vec::new(),
         }
     }
 
     pub fn decks_dir(&self) -> PathBuf {
-        self.decks.clone().unwrap_or_else(|| self.game.join("Caveman Decks"))
+        self.decks.as_deref().map(|d| folders::modern(&self.game, d)).unwrap_or_else(|| folders::decks(&self.game))
     }
 
     pub fn wheels_dir(&self) -> PathBuf {
-        self.wheels.clone().unwrap_or_else(|| self.game.join("Caveman Wheels"))
+        self.wheels.as_deref().map(|d| folders::modern(&self.game, d)).unwrap_or_else(|| folders::wheels(&self.game))
+    }
+
+    pub fn grips_dir(&self) -> PathBuf {
+        self.grips.clone().unwrap_or_else(|| folders::grips(&self.game))
+    }
+
+    pub fn patterns_dir(&self) -> PathBuf {
+        self.patterns.clone().unwrap_or_else(|| folders::patterns(&self.game))
     }
 
     pub fn mods_dir(&self) -> PathBuf {
@@ -93,18 +117,28 @@ impl Options {
     }
 }
 
-pub const USAGE: &str = "usage: caveman [--game DIR] [--decks DIR] [--wheels DIR] [--mod NAME] [--out DIR] [--prefix TEXT] [--if-changed] [--json]
-               [--cache DIR] [--no-cache]
+pub const USAGE: &str = "usage: caveman [--game DIR] [--decks DIR] [--wheels DIR] [--grips DIR] [--patterns DIR] [--mod NAME] [--out DIR] [--prefix TEXT] [--if-changed] [--json]
+               [--cache DIR] [--no-cache] [--author NAME]
 
-Builds the PNGs in <game>\\Caveman Decks (decks; effect suffixes such as Cool Deck.holo-frost.spot.png, or a settings
-file Cool Deck.caveman.json beside the PNG) and <game>\\Caveman Wheels (wheels; Name.ff0000.png for a coloured wheel)
+Builds the PNGs in <game>\\Caveman\\Decks (decks; effect suffixes such as Cool Deck.holo-frost.spot.png, or a settings
+file Cool Deck.caveman.json beside the PNG; Cool Deck.ff0000.png shows red where the art is transparent) and <game>\\Caveman\\Wheels (wheels; Name.ff0000.png for a coloured wheel)
 into the mod <game>\\Mods\\Caveman-Decks, and Caveman-Shaders when a deck uses cycle, glow or nyan. A GIF (or, with
-ffmpeg on PATH, a video) in Caveman Decks becomes an animated deck. Decks and wheels that did not change since the
+ffmpeg on PATH, a video) in the decks folder becomes an animated deck. (The folders from before 2026-10-30, Caveman Decks
+and Caveman Wheels in the game folder itself, move into the Caveman folder on the first run.) Decks and wheels that did not change since the
 last build come from the item cache (--cache, default %LOCALAPPDATA%\\Caveman\\cache); --no-cache builds them all
 again.
 
+Grips (the game's grip colours) come from <game>\\Caveman\\Grips: a PNG is printed on the grip tape (transparent parts
+show the grit; Name.ff69b4.png puts the grit in that colour under it), and a file Name.ff69b4.grip (any contents) is
+plain grip in that colour. Grip patterns (the game's cutouts) come from <game>\\Caveman\\Patterns: a PNG whose clear or
+dark parts cut the grip away so the wood shows; a 1:4 picture covers the deck, any other is repeated as a tile.
+
+A drop folder's .caveman-off.json (the Caveman app's switch per item) lists files that are not built. --author NAME
+goes into the mod's manifest.json (default Caveman).
+
 caveman testclip <out.gif> [--frames N] [--fps F] [--size WxH] writes a looping test animation to drop into the folder.
-caveman fx [--out DIR] builds Caveman FX's own mod (Caveman-FX: fx states and FX test decks; caveman fx --help).";
+caveman fx [--out DIR] builds Caveman FX's own mod (Caveman-FX: the fx states and The Caveman; caveman fx --help).
+caveman pack --owner OWNER --name NAME ... builds chosen decks and wheels into a Thunderstore-ready package (caveman pack --help).";
 
 /// `caveman testclip`: a test animation as a GIF (anim::test_clip).
 pub fn run_testclip(args: &[String]) -> Result<()> {
@@ -140,7 +174,13 @@ pub fn run_testclip(args: &[String]) -> Result<()> {
 
 /// An animated deck from a clip file: the art (its first frame on the deck), its layers (the frame atlas in the holo
 /// map slot with the shader marker; the other layers as the effects make them) and notes on what was done.
-fn anim_deck(path: &Path, settings: &Settings, effects: &DeckEffects, wood: &Image, defaults: &(Image, Image)) -> std::result::Result<(Image, Layers, Vec<String>), String> {
+fn anim_deck(
+    path: &Path,
+    settings: &Settings,
+    effects: &DeckEffects,
+    wood: &Image,
+    defaults: &(Image, Image),
+) -> std::result::Result<(Image, Layers, Vec<String>), String> {
     let policy = settings.policy();
     let clip = anim::load_clip(path, &policy).map_err(|e| e.to_string())?;
     let plan = anim::plan(&clip, &policy).map_err(|e| e.to_string())?;
@@ -201,6 +241,8 @@ pub fn parse_args(args: &[String]) -> std::result::Result<Option<Options>, Strin
             "--game" => o.game = PathBuf::from(value()?),
             "--decks" => o.decks = Some(PathBuf::from(value()?)),
             "--wheels" => o.wheels = Some(PathBuf::from(value()?)),
+            "--grips" => o.grips = Some(PathBuf::from(value()?)),
+            "--patterns" => o.patterns = Some(PathBuf::from(value()?)),
             "--mod" => o.mod_name = value()?,
             "--out" => o.out = Some(PathBuf::from(value()?)),
             "--prefix" => o.prefix = value()?,
@@ -208,6 +250,7 @@ pub fn parse_args(args: &[String]) -> std::result::Result<Option<Options>, Strin
             "--json" => o.json = true,
             "--cache" => o.cache = Some(PathBuf::from(value()?)),
             "--no-cache" => o.no_cache = true,
+            "--author" => o.author = Some(value()?),
             other => return Err(format!("unknown option {other}")),
         }
         i += 1;
@@ -231,16 +274,27 @@ pub enum Outcome {
     UpToDate,
     /// Nothing to build (Caveman's mods removed if there were any).
     Nothing,
-    Built { decks: usize, wheels: usize, shaders: Shaders },
+    Built {
+        decks: usize,
+        wheels: usize,
+        grips: usize,
+        cutouts: usize,
+        shaders: Shaders,
+    },
 }
 
 /// Runs a build: scan, check names, preview, build, stamp; the shader mod when needed.
 pub fn run(o: &Options, report: &mut Reporter) -> Result<Outcome> {
+    // the one Caveman folder: drop folders from before 2026-10-30 move into it first (folders.rs)
+    for line in folders::adopt_old_folders(&o.game) {
+        report.say(&line, json!({"event": "moved_folder", "text": line}));
+    }
     let (decks_dir, wheels_dir, mods_dir) = (o.decks_dir(), o.wheels_dir(), o.mods_dir());
+    let (grips_dir, patterns_dir) = (o.grips_dir(), o.patterns_dir());
     let mod_dir = mods_dir.join(&o.mod_name);
     let shader_dir = mods_dir.join(SHADER_MOD);
     let mut made = false;
-    for (dir, what) in [(&decks_dir, "deck"), (&wheels_dir, "wheel")] {
+    for (dir, what) in [(&decks_dir, "deck"), (&wheels_dir, "wheel"), (&grips_dir, "grip"), (&patterns_dir, "grip pattern")] {
         if !dir.is_dir() {
             std::fs::create_dir_all(dir)?;
             let text = format!("Made {}: put {what} PNGs in it and run Caveman again.", dir.display());
@@ -248,10 +302,10 @@ pub fn run(o: &Options, report: &mut Reporter) -> Result<Outcome> {
             made = true;
         }
     }
-    if made && !has_png(&decks_dir) && !has_png(&wheels_dir) {
+    if made && !has_png(&decks_dir) && !has_png(&wheels_dir) && !has_png(&grips_dir) && !has_png(&patterns_dir) {
         return Ok(Outcome::Nothing);
     }
-    let stamp = fingerprint(o, &decks_dir, &wheels_dir)?;
+    let stamp = fingerprint(o, &decks_dir, &wheels_dir, &grips_dir, &patterns_dir)?;
     let stamp_file = mod_dir.join(FINGERPRINT);
     if o.if_changed && std::fs::read_to_string(&stamp_file).ok().as_deref() == Some(stamp.as_str()) {
         report.say("Decks are up to date.", json!({"event": "up_to_date", "mod_dir": mod_dir.display().to_string()}));
@@ -261,32 +315,93 @@ pub fn run(o: &Options, report: &mut Reporter) -> Result<Outcome> {
     let mut found = Vec::new();
     names::scan_decks(&decks_dir, &o.prefix, true, report, &mut found);
     let n_decks = found.len();
-    report.say(&format!("{n_decks} deck image(s) in {}", decks_dir.display()), json!({"event": "scanned", "kind": "deck", "count": n_decks, "folder": decks_dir.display().to_string()}));
+    report.say(
+        &format!("{n_decks} deck image(s) in {}", decks_dir.display()),
+        json!({"event": "scanned", "kind": "deck", "count": n_decks, "folder": decks_dir.display().to_string()}),
+    );
     names::scan_wheels(&wheels_dir, &o.prefix, true, report, &mut found);
     let n_wheels = found.len() - n_decks;
     if n_wheels > 0 {
-        report.say(&format!("{n_wheels} wheel image(s) in {}", wheels_dir.display()), json!({"event": "scanned", "kind": "wheel", "count": n_wheels, "folder": wheels_dir.display().to_string()}));
+        report.say(
+            &format!("{n_wheels} wheel image(s) in {}", wheels_dir.display()),
+            json!({"event": "scanned", "kind": "wheel", "count": n_wheels, "folder": wheels_dir.display().to_string()}),
+        );
+    }
+    let n_before = found.len();
+    names::scan_grips(&grips_dir, &o.prefix, true, report, &mut found);
+    let n_grips = found.len() - n_before;
+    if n_grips > 0 {
+        report.say(
+            &format!("{n_grips} grip(s) in {}", grips_dir.display()),
+            json!({"event": "scanned", "kind": "grip", "count": n_grips, "folder": grips_dir.display().to_string()}),
+        );
+    }
+    let n_before = found.len();
+    names::scan_patterns(&patterns_dir, &o.prefix, true, report, &mut found);
+    let n_patterns = found.len() - n_before;
+    if n_patterns > 0 {
+        report.say(
+            &format!("{n_patterns} grip pattern(s) in {}", patterns_dir.display()),
+            json!({"event": "scanned", "kind": "pattern", "count": n_patterns, "folder": patterns_dir.display().to_string()}),
+        );
+    }
+    // what the Caveman app switched off (.caveman-off.json in each folder) is not built
+    let (off_decks, off_problem) = selection::OffList::load(&decks_dir);
+    let (off_wheels, off_problem_wheels) = selection::OffList::load(&wheels_dir);
+    let (off_grips, off_problem_grips) = selection::OffList::load(&grips_dir);
+    let (off_patterns, off_problem_patterns) = selection::OffList::load(&patterns_dir);
+    for problem in [off_problem, off_problem_wheels, off_problem_grips, off_problem_patterns].into_iter().flatten() {
+        let text = format!("note: {problem} (nothing switched off)");
+        report.say(&format!("  {text}"), json!({"event": "log", "message": text}));
+    }
+    let mut kept = Vec::with_capacity(found.len());
+    let mut off_count = 0usize;
+    for f in found {
+        let (root, list) = match f.kind {
+            Kind::Deck => (&decks_dir, &off_decks),
+            Kind::Wheel => (&wheels_dir, &off_wheels),
+            Kind::Grip => (&grips_dir, &off_grips),
+            Kind::Pattern => (&patterns_dir, &off_patterns),
+        };
+        if list.is_off(root, &f.path) {
+            off_count += 1;
+            let kind = report::kind_name(&f.kind);
+            report.say(&format!("  off {}", f.display), json!({"event": "off", "kind": kind, "display": f.display, "source": f.path.display().to_string()}));
+            continue;
+        }
+        kept.push(f);
+    }
+    let found = kept;
+    if off_count > 0 {
+        report.say(&format!("{off_count} switched off in Caveman (not built)"), json!({"event": "off_count", "count": off_count}));
     }
     if found.is_empty() {
         let shaders = clear(&mod_dir, &shader_dir, report)?;
-        return Ok(if shaders == Shaders::Removed { Outcome::Built { decks: 0, wheels: 0, shaders } } else { Outcome::Nothing });
+        return Ok(if shaders == Shaders::Removed { Outcome::Built { decks: 0, wheels: 0, grips: 0, cutouts: 0, shaders } } else { Outcome::Nothing });
     }
 
     let wood = Arc::new(build::natural_wood(&game)?);
-    let taken = items::existing_items(&game, &o.game.join("Mods"), &o.mod_name, report)?;
+    let skip: Vec<&str> = std::iter::once(o.mod_name.as_str()).chain(o.skip_mods.iter().map(String::as_str)).collect();
+    let taken = items::existing_items_except(&game, &o.game.join("Mods"), &skip, report)?;
     let previews = decks_dir.join(PREVIEWS);
     std::fs::create_dir_all(&previews)?;
     let mask = Image::decode_png(PREVIEW_MASK)?;
-    let bopts = BuildOptions { cache_dir: o.cache.clone(), item_cache: !o.no_cache, ..BuildOptions::default() };
+    let bopts = BuildOptions {
+        cache_dir: o.cache.clone(),
+        item_cache: !o.no_cache,
+        author: o.author.clone(),
+        tool_version: env!("CARGO_PKG_VERSION").to_string(),
+        ..BuildOptions::default()
+    };
     // the game's default mask and normal map, under every deck with its own layers: loaded once, when first needed
     let defaults: Arc<OnceLock<std::result::Result<(Image, Image), String>>> = Arc::new(OnceLock::new());
     // a deck's art and layers, loaded when the build gets to it (not held for every deck of a big collection until then)
-    let deck_loader = |path: &Path, settings: &Option<Settings>, effects: &caveman_core::effects::DeckEffects| -> build::DeckLoader {
+    let deck_loader = |path: &Path, settings: &Option<Settings>, effects: &caveman_core::effects::DeckEffects, paint: Option<[u8; 3]>| -> build::DeckLoader {
         let (path, wood, settings, effects, game, defaults) =
             (path.to_path_buf(), wood.clone(), settings.clone(), effects.clone(), game.clone(), defaults.clone());
         Arc::new(move || {
             let img = Image::read_png(&path).map_err(|e| e.to_string())?;
-            let (art, _) = build::fit_art(&img, &wood).map_err(|e| e.to_string())?;
+            let (art, _) = build::fit_art_on(&img, &wood, paint).map_err(|e| e.to_string())?;
             let layers = match &settings {
                 Some(s) if s.needs_layers() => {
                     let (m, n) = defaults.get_or_init(|| build::default_layers(&game).map_err(|e| e.to_string())).as_ref().map_err(|e| e.clone())?;
@@ -298,16 +413,18 @@ pub fn run(o: &Options, report: &mut Reporter) -> Result<Outcome> {
         })
     };
     // an animated deck's clip, decoded and laid out when the build gets to it (the item-cache path)
-    let anim_loader = |path: &Path, settings: &Settings, effects: &DeckEffects| -> build::DeckLoader {
-        let (path, wood, settings, effects, game, defaults) = (path.to_path_buf(), wood.clone(), settings.clone(), effects.clone(), game.clone(), defaults.clone());
+    let anim_loader = |path: &Path, settings: &Settings, effects: &DeckEffects, paint: Option<[u8; 3]>| -> build::DeckLoader {
+        let (path, wood, settings, effects, game, defaults) =
+            (path.to_path_buf(), wood.clone(), settings.clone(), effects.clone(), game.clone(), defaults.clone());
         Arc::new(move || {
             let d = defaults.get_or_init(|| build::default_layers(&game).map_err(|e| e.to_string())).as_ref().map_err(|e| e.clone())?;
-            let (art, layers, _) = anim_deck(&path, &settings, &effects, &wood, d)?;
+            let (art, layers, _) = anim_deck(&path, &settings, &effects, &build::deck_backdrop(&wood, paint), d)?;
             Ok((art, DeckLayers::Layers(layers)))
         })
     };
     let mut seen: HashMap<String, PathBuf> = HashMap::new();
     let (mut decks, mut wheels) = (Vec::new(), Vec::new());
+    let (mut grips, mut cutouts): (Vec<GripSpec>, Vec<CutoutSpec>) = (Vec::new(), Vec::new());
     let mut needs_shaders = false;
     let mut animated = false;
     for mut f in found {
@@ -332,6 +449,44 @@ pub fn run(o: &Options, report: &mut Reporter) -> Result<Outcome> {
                 continue;
             }
         };
+        if f.kind == Kind::Grip {
+            // a grip: a picture printed on the grit (`.png`), plain grip in a colour (`.grip`), or both
+            let colour_bytes: Vec<u8> = f.paint.map(|c| c.to_vec()).unwrap_or_default();
+            let plain = !f.path.to_string_lossy().to_lowercase().ends_with(".png");
+            let input = build::item_input(&[b"grip", &bytes, &colour_bytes, &[plain as u8]]);
+            let print = if plain {
+                None
+            } else {
+                match Image::decode_png(&bytes) {
+                    Ok(img) => Some(img),
+                    Err(e) => {
+                        report.skipped(Kind::Grip, &f.path, &e.to_string());
+                        continue;
+                    }
+                }
+            };
+            seen.insert(key, f.path.clone());
+            let colour = f.paint.map(|c| format!("#{:02x}{:02x}{:02x}", c[0], c[1], c[2]));
+            report.item(Kind::Grip, &f.display, &f.key, &f.path, &f.notes, json!({"colour": colour, "print": !plain}));
+            grips.push(GripSpec { display: f.display, key: f.key, colour: f.paint, print, input: Some(input), notes: Vec::new() });
+            continue;
+        }
+        if f.kind == Kind::Pattern {
+            let input = build::item_input(&[b"pattern", &bytes]);
+            let img = match Image::decode_png(&bytes) {
+                Ok(img) => img,
+                Err(e) => {
+                    report.skipped(Kind::Pattern, &f.path, &e.to_string());
+                    continue;
+                }
+            };
+            let (mask, notes) = build::fit_mask(&img);
+            seen.insert(key, f.path.clone());
+            f.notes.extend(notes.iter().cloned());
+            report.item(Kind::Pattern, &f.display, &f.key, &f.path, &f.notes, json!({}));
+            cutouts.push(CutoutSpec { display: f.display, key: f.key, mask, input: Some(input), notes });
+            continue;
+        }
         if f.kind == Kind::Wheel {
             let input = build::item_input(&[b"wheel", &bytes, &f.colour]);
             let cached = build::cached_notes(&game, &bopts, &mods_dir, &o.mod_name, "wheel", &f.key, &f.display, input);
@@ -376,14 +531,21 @@ pub fn run(o: &Options, report: &mut Reporter) -> Result<Outcome> {
             };
             let effects_text = format!("{:?}", f.effects);
             let policy_text = format!("{:?}", settings.policy());
-            let input = build::item_input(&[b"anim", &bytes, effects_text.as_bytes(), sidecar.as_bytes(), policy_text.as_bytes(), anim::SCHEME.as_bytes()]);
+            // a deck's colour counts only when it has one, so the inputs of decks without one stay as they were
+            let paint_text = f.paint.map(|c| format!("paint {c:?}")).unwrap_or_default();
+            let mut parts: Vec<&[u8]> = vec![b"anim", &bytes, effects_text.as_bytes(), sidecar.as_bytes(), policy_text.as_bytes(), anim::SCHEME.as_bytes()];
+            if f.paint.is_some() {
+                parts.push(paint_text.as_bytes());
+            }
+            let input = build::item_input(&parts);
             let preview_path = previews.join(format!("{}.png", f.display));
-            let cached = if preview_path.is_file() { build::cached_notes(&game, &bopts, &mods_dir, &o.mod_name, "deck", &f.key, &f.display, input) } else { None };
+            let cached =
+                if preview_path.is_file() { build::cached_notes(&game, &bopts, &mods_dir, &o.mod_name, "deck", &f.key, &f.display, input) } else { None };
             let (source, art_notes) = match cached {
-                Some(notes) => (DeckSource::Lazy(anim_loader(&f.path, &settings, &f.effects)), notes),
+                Some(notes) => (DeckSource::Lazy(anim_loader(&f.path, &settings, &f.effects, f.paint)), notes),
                 None => {
                     let d = defaults.get_or_init(|| build::default_layers(&game).map_err(|e| e.to_string())).as_ref().map_err(|e| e.clone())?;
-                    match anim_deck(&f.path, &settings, &f.effects, &wood, d) {
+                    match anim_deck(&f.path, &settings, &f.effects, &build::deck_backdrop(&wood, f.paint), d) {
                         Ok((art, layers, notes)) => {
                             preview(&art, &mask).write_png(&preview_path)?;
                             // decoded once: the build takes the atlas as it is (animated decks are few and large)
@@ -421,13 +583,17 @@ pub fn run(o: &Options, report: &mut Reporter) -> Result<Outcome> {
             }
         }
         let effects_text = format!("{:?}", f.effects);
+        let paint_text = f.paint.map(|c| format!("paint {c:?}")).unwrap_or_default();
         let mut parts: Vec<&[u8]> = vec![b"deck", &bytes, effects_text.as_bytes(), sidecar.as_bytes()];
         parts.extend(layer_bytes.iter().map(|b| b.as_slice()));
+        if f.paint.is_some() {
+            parts.push(paint_text.as_bytes());
+        }
         let input = build::item_input(&parts);
         let preview_path = previews.join(format!("{}.png", f.display));
         let cached = if preview_path.is_file() { build::cached_notes(&game, &bopts, &mods_dir, &o.mod_name, "deck", &f.key, &f.display, input) } else { None };
         let (source, art_notes) = match cached {
-            Some(notes) => (DeckSource::Lazy(deck_loader(&f.path, &f.settings, &f.effects)), notes),
+            Some(notes) => (DeckSource::Lazy(deck_loader(&f.path, &f.settings, &f.effects, f.paint)), notes),
             None => {
                 let img = match Image::decode_png(&bytes) {
                     Ok(img) => img,
@@ -436,7 +602,7 @@ pub fn run(o: &Options, report: &mut Reporter) -> Result<Outcome> {
                         continue;
                     }
                 };
-                let (art, fit_notes) = match build::fit_art(&img, &wood) {
+                let (art, fit_notes) = match build::fit_art_on(&img, &wood, f.paint) {
                     Ok(x) => x,
                     Err(e) => {
                         report.skipped(Kind::Deck, &f.path, &e.to_string());
@@ -452,7 +618,7 @@ pub fn run(o: &Options, report: &mut Reporter) -> Result<Outcome> {
                     }
                 }
                 // checked and previewed: the build loads the art and layers again when it gets to this deck
-                (DeckSource::Lazy(deck_loader(&f.path, &f.settings, &f.effects)), fit_notes)
+                (DeckSource::Lazy(deck_loader(&f.path, &f.settings, &f.effects, f.paint)), fit_notes)
             }
         };
         f.notes.extend(art_notes.iter().cloned());
@@ -465,19 +631,23 @@ pub fn run(o: &Options, report: &mut Reporter) -> Result<Outcome> {
     }
     let ready = format!("{} deck(s) ready; previews in {}", decks.len(), previews.display());
     report.say(&ready, json!({"event": "ready", "decks": decks.len(), "wheels": wheels.len(), "previews": previews.display().to_string()}));
-    if decks.is_empty() && wheels.is_empty() {
+    if decks.is_empty() && wheels.is_empty() && grips.is_empty() && cutouts.is_empty() {
         let shaders = clear(&mod_dir, &shader_dir, report)?;
-        return Ok(if shaders == Shaders::Removed { Outcome::Built { decks: 0, wheels: 0, shaders } } else { Outcome::Nothing });
+        return Ok(if shaders == Shaders::Removed { Outcome::Built { decks: 0, wheels: 0, grips: 0, cutouts: 0, shaders } } else { Outcome::Nothing });
     }
 
     let built = {
         let mut log = |line: &str| report.log(line);
-        build::build(game.clone(), &decks, &wheels, &mods_dir, &o.mod_name, &bopts, &mut log)?
+        build::build(game.clone(), &decks, &wheels, &grips, &cutouts, &mods_dir, &o.mod_name, &bopts, &mut log)?
     };
-    if !built.wheels.is_empty() {
-        let dir = wheels_dir.join(PREVIEWS);
+    // the menu thumbnails of wheels, grips and patterns are their previews (decks render their own)
+    for (items, folder) in [(&built.wheels, &wheels_dir), (&built.grips, &grips_dir), (&built.cutouts, &patterns_dir)] {
+        if items.is_empty() {
+            continue;
+        }
+        let dir = folder.join(PREVIEWS);
         std::fs::create_dir_all(&dir)?;
-        for w in &built.wheels {
+        for w in items {
             if let Some(thumbnail) = &w.thumbnail {
                 thumbnail.write_png(dir.join(format!("{}.png", w.display)))?;
             }
@@ -485,7 +655,8 @@ pub fn run(o: &Options, report: &mut Reporter) -> Result<Outcome> {
     }
     let shaders = if needs_shaders {
         let stats = build_shader_mod(&game, &shader_dir, &ShaderModOptions { title: "Caveman Shaders".into(), built: None, animated })?;
-        let text = format!("Built the shader effects into {} ({} KB{})", shader_dir.display(), stats.cas / 1024, if animated { ", with animated decks" } else { "" });
+        let text =
+            format!("Built the shader effects into {} ({} KB{})", shader_dir.display(), stats.cas / 1024, if animated { ", with animated decks" } else { "" });
         report.say(&text, json!({"event": "shaders_built", "mod_dir": shader_dir.display().to_string(), "cas_bytes": stats.cas, "animated": animated}));
         Shaders::Built
     } else if remove_generated(&shader_dir)? {
@@ -496,17 +667,23 @@ pub fn run(o: &Options, report: &mut Reporter) -> Result<Outcome> {
         Shaders::None
     };
     std::fs::write(&stamp_file, &stamp)?;
-    let what = if built.wheels.is_empty() {
-        format!("{} deck(s)", built.decks.len())
-    } else {
-        format!("{} deck(s) and {} wheel(s)", built.decks.len(), built.wheels.len())
+    let counts: Vec<String> =
+        [(built.decks.len(), "deck(s)"), (built.wheels.len(), "wheel(s)"), (built.grips.len(), "grip(s)"), (built.cutouts.len(), "grip pattern(s)")]
+            .iter()
+            .filter(|(n, _)| *n > 0)
+            .map(|(n, what)| format!("{n} {what}"))
+            .collect();
+    let what = match counts.len() {
+        0 => "nothing".to_string(),
+        1 => counts[0].clone(),
+        n => format!("{} and {}", counts[..n - 1].join(", "), counts[n - 1]),
     };
     let text = format!("Built {what} into {} ({} KB)", built.mod_dir.display(), built.cas_bytes / 1024);
     report.say(
         &text,
-        json!({"event": "built", "mod_dir": built.mod_dir.display().to_string(), "decks": built.decks.len(), "wheels": built.wheels.len(), "cas_bytes": built.cas_bytes, "shaders": format!("{shaders:?}").to_lowercase()}),
+        json!({"event": "built", "mod_dir": built.mod_dir.display().to_string(), "decks": built.decks.len(), "wheels": built.wheels.len(), "grips": built.grips.len(), "patterns": built.cutouts.len(), "cas_bytes": built.cas_bytes, "shaders": format!("{shaders:?}").to_lowercase()}),
     );
-    Ok(Outcome::Built { decks: built.decks.len(), wheels: built.wheels.len(), shaders })
+    Ok(Outcome::Built { decks: built.decks.len(), wheels: built.wheels.len(), grips: built.grips.len(), cutouts: built.cutouts.len(), shaders })
 }
 
 /// No decks or wheels left to build: removes Caveman's mods (only Caveman-built ones).
@@ -540,7 +717,7 @@ pub fn remove_generated(mod_dir: &Path) -> Result<bool> {
 pub fn preview(art: &Image, mask: &Image) -> Image {
     let art = art.to_rgb();
     let mut out = Image::new(art.width, art.height, 3);
-    for ((px, src), &m) in out.data.chunks_exact_mut(3).zip(art.data.chunks_exact(3)).zip(&mask.data) {
+    for ((px, src), &m) in out.data.as_chunks_mut::<3>().0.iter_mut().zip(art.data.chunks_exact(3)).zip(&mask.data) {
         let m = m as u32;
         for (o, &a) in px.iter_mut().zip(src) {
             let t = 20 * (255 - m) + a as u32 * m + 128; // Pillow's BLEND: DIV255(dark (255 - m) + art m)
@@ -560,7 +737,8 @@ fn has_png(dir: &Path) -> bool {
                 stack.push(p);
             } else {
                 let name = p.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
-                if name.to_lowercase().ends_with(".png") || anim::clip_kind(&name).is_some() {
+                let lower = name.to_lowercase();
+                if lower.ends_with(".png") || lower.ends_with(".grip") || anim::clip_kind(&name).is_some() {
                     return true;
                 }
             }
@@ -572,17 +750,20 @@ fn has_png(dir: &Path) -> bool {
 /// What a build depends on (caveman.fingerprint): every PNG and settings file under the two folders (path, size,
 /// time), the options, and Caveman itself (this executable's size and time, and the engine's version). Equal
 /// fingerprints mean the mod on disk is already what a build would write.
-pub fn fingerprint(o: &Options, decks_dir: &Path, wheels_dir: &Path) -> Result<String> {
+pub fn fingerprint(o: &Options, decks_dir: &Path, wheels_dir: &Path, grips_dir: &Path, patterns_dir: &Path) -> Result<String> {
     let mut text = format!(
-        "caveman {}|game {}|mod {}|prefix {:?}|decks {}|wheels {}\n",
+        "caveman {}|game {}|mod {}|prefix {:?}|decks {}|wheels {}|grips {}|patterns {}|author {:?}\n",
         env!("CARGO_PKG_VERSION"),
         absolute(&o.game).display(),
         o.mod_name,
         o.prefix,
         absolute(decks_dir).display(),
-        absolute(wheels_dir).display()
+        absolute(wheels_dir).display(),
+        absolute(grips_dir).display(),
+        absolute(patterns_dir).display(),
+        o.author
     );
-    for (label, dir) in [("deck", decks_dir), ("wheel", wheels_dir)] {
+    for (label, dir) in [("deck", decks_dir), ("wheel", wheels_dir), ("grip", grips_dir), ("pattern", patterns_dir)] {
         walk(dir, dir, label, &mut text);
     }
     if let Ok(exe) = std::env::current_exe() {
@@ -609,7 +790,12 @@ fn walk(root: &Path, dir: &Path, label: &str, text: &mut String) {
             continue;
         }
         let lower = name.to_lowercase();
-        if lower.ends_with(".png") || settings::is_sidecar(&lower) || anim::clip_kind(&lower).is_some() {
+        if lower.ends_with(".png")
+            || lower.ends_with(".grip")
+            || settings::is_sidecar(&lower)
+            || anim::clip_kind(&lower).is_some()
+            || (dir == root && lower == selection::OFF_FILE)
+        {
             if let Ok(md) = std::fs::metadata(&path) {
                 let rel = path.strip_prefix(root).unwrap_or(&path).display().to_string();
                 text.push_str(&format!("{label} {rel}|{}|{}\n", md.len(), mtime_ns(&md)));
@@ -639,7 +825,7 @@ mod tests {
         let o = parse_args(&a).unwrap().unwrap();
         assert_eq!(o.game, PathBuf::from("G"));
         assert_eq!(o.decks_dir(), PathBuf::from("D"));
-        assert_eq!(o.wheels_dir(), PathBuf::from("G").join("Caveman Wheels"));
+        assert_eq!(o.wheels_dir(), PathBuf::from("G").join("Caveman").join("Wheels"));
         assert_eq!(o.prefix, "000 - ");
         assert!(o.if_changed && o.json);
         assert!(parse_args(&["--nope".to_string()]).is_err());

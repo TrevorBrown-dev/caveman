@@ -62,10 +62,7 @@ impl Image {
     /// Wraps raw interleaved pixels.
     pub fn from_raw(width: usize, height: usize, channels: usize, data: Vec<u8>) -> Result<Image> {
         if !matches!(channels, 1 | 3 | 4) || data.len() != width * height * channels {
-            return Err(ImageError::Invalid(format!(
-                "{} bytes do not make a {width} x {height} image of {channels} channels",
-                data.len()
-            )));
+            return Err(ImageError::Invalid(format!("{} bytes do not make a {width} x {height} image of {channels} channels", data.len())));
         }
         Ok(Image { width, height, channels, data })
     }
@@ -143,12 +140,7 @@ impl Image {
         match self.channels {
             3 => self.clone(),
             1 => Image { width: self.width, height: self.height, channels: 3, data: self.data.iter().flat_map(|&v| [v, v, v]).collect() },
-            _ => Image {
-                width: self.width,
-                height: self.height,
-                channels: 3,
-                data: self.data.chunks_exact(4).flat_map(|p| [p[0], p[1], p[2]]).collect(),
-            },
+            _ => Image { width: self.width, height: self.height, channels: 3, data: self.data.chunks_exact(4).flat_map(|p| [p[0], p[1], p[2]]).collect() },
         }
     }
 
@@ -157,12 +149,7 @@ impl Image {
         match self.channels {
             4 => self.clone(),
             1 => Image { width: self.width, height: self.height, channels: 4, data: self.data.iter().flat_map(|&v| [v, v, v, 255]).collect() },
-            _ => Image {
-                width: self.width,
-                height: self.height,
-                channels: 4,
-                data: self.data.chunks_exact(3).flat_map(|p| [p[0], p[1], p[2], 255]).collect(),
-            },
+            _ => Image { width: self.width, height: self.height, channels: 4, data: self.data.chunks_exact(3).flat_map(|p| [p[0], p[1], p[2], 255]).collect() },
         }
     }
 
@@ -186,12 +173,7 @@ impl Image {
 
     /// One channel as an L image.
     pub fn channel(&self, c: usize) -> Image {
-        Image {
-            width: self.width,
-            height: self.height,
-            channels: 1,
-            data: self.data.chunks_exact(self.channels).map(|p| p[c]).collect(),
-        }
+        Image { width: self.width, height: self.height, channels: 1, data: self.data.chunks_exact(self.channels).map(|p| p[c]).collect() }
     }
 
     // ------------------------------------------------------------ geometry
@@ -474,10 +456,7 @@ fn coefficients(in_size: usize, out_size: usize) -> (Vec<(usize, usize)>, Vec<i3
         bounds.push((xmin as usize, xmax as usize));
     }
     let scale_fixed = (1u32 << PRECISION_BITS) as f64;
-    let fixed = kk
-        .iter()
-        .map(|&v| if v < 0.0 { (-0.5 + v * scale_fixed) as i32 } else { (0.5 + v * scale_fixed) as i32 })
-        .collect();
+    let fixed = kk.iter().map(|&v| if v < 0.0 { (-0.5 + v * scale_fixed) as i32 } else { (0.5 + v * scale_fixed) as i32 }).collect();
     (bounds, fixed, ksize)
 }
 

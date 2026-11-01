@@ -96,7 +96,7 @@ fn hook_on_a_fake_vtable() {
                 let mut bad = 0u64;
                 let mut k = 0usize;
                 while RUN.load(Ordering::Relaxed) {
-                    let view = if k % 2 == 0 { ours_a } else { 0x5000 + t * 0x100 };
+                    let view = if k.is_multiple_of(2) { ours_a } else { 0x5000 + t * 0x100 };
                     let f: Getter = unsafe { std::mem::transmute::<usize, Getter>(std::ptr::read_volatile(slot as *const usize)) };
                     let r = unsafe { f(view, 0, 0x30, 0x400) };
                     if r > 1 && r & 0x1_0000 == 0 {

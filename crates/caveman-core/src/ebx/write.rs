@@ -662,13 +662,7 @@ impl<'a> Builder<'a> {
         };
         // Struct and enum arrays name their type's fixup slot (the game's files do it for enums too).
         let class_ref = if f.type_() == STRUCTURE || f.type_() == ENUM { self.fixup_slot(f.class_ref as usize) } else { 0xFFFF };
-        self.arrays_out.push(ArrayRecord {
-            offset: data,
-            count: values.len() as u32,
-            hash: h,
-            encoded_type: ((f.encoded_type as u32) << 1) as u16,
-            class_ref,
-        });
+        self.arrays_out.push(ArrayRecord { offset: data, count: values.len() as u32, hash: h, encoded_type: ((f.encoded_type as u32) << 1) as u16, class_ref });
         self.array_data.insert(array as *const Value, data);
         Ok(())
     }
@@ -689,13 +683,7 @@ impl<'a> Builder<'a> {
             self.put(offset, &source.raw_bytes);
             self.relocate(source.offset, source.raw_bytes.len(), offset)?;
             moved.insert(source.offset, offset);
-            self.boxed_out.push(ArrayRecord {
-                offset,
-                count: source.count,
-                hash: source.hash,
-                encoded_type: source.encoded_type,
-                class_ref: source.class_ref,
-            });
+            self.boxed_out.push(ArrayRecord { offset, count: source.count, hash: source.hash, encoded_type: source.encoded_type, class_ref: source.class_ref });
         }
         for (slot, target) in std::mem::take(&mut self.boxed_targets) {
             let at = self.boxed_offset + (target - doc.boxed_values_offset);
@@ -763,11 +751,10 @@ impl<'a> Builder<'a> {
                 let source = *source;
                 // A text the file kept inside another (a shared tail, an empty string on a terminator) points into
                 // that text's new copy again.
-                let host = placed.iter().rev().find(|h| {
-                    h.0 <= source
-                        && source + raw.len() <= h.0 + h.1.len()
-                        && h.1[source - h.0..source - h.0 + raw.len()] == raw[..]
-                });
+                let host = placed
+                    .iter()
+                    .rev()
+                    .find(|h| h.0 <= source && source + raw.len() <= h.0 + h.1.len() && h.1[source - h.0..source - h.0 + raw.len()] == raw[..]);
                 if let Some(h) = host {
                     offsets.insert(key.clone(), h.2 + source - h.0);
                     continue;

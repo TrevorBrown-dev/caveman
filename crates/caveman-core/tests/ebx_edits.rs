@@ -9,7 +9,9 @@ use caveman_core::ebx::{self, Data, Document, Guid, Object, Pointer, ResourceRef
 
 fn corpus_dir() -> PathBuf {
     std::env::var_os("CAVEMAN_EBX_CORPUS").map(PathBuf::from).unwrap_or_else(|| {
-        PathBuf::from(r"C:\Users\thetr\AppData\Local\Temp\claude\C--Users-thetr-Projects-ReSkate\c6d3c964-296a-4f0b-bedc-241e3cf960f6\scratchpad\ebxport\corpus")
+        PathBuf::from(
+            r"C:\Users\thetr\AppData\Local\Temp\claude\C--Users-thetr-Projects-ReSkate\c6d3c964-296a-4f0b-bedc-241e3cf960f6\scratchpad\ebxport\corpus",
+        )
     })
 }
 
@@ -122,10 +124,7 @@ fn build_edits_match_python() {
     // appearance preset, pointed at the new texture
     let t_tex = ebx::read_document(&t["tex"]).unwrap();
     let mut ap = g.clone_doc(&t["ap"], &format!("{p}{base}_ap"));
-    ap.remap_imports(&HashMap::from([
-        (t_tex.file_guid, tex.file_guid),
-        (t_tex.instances[0].instance_guid, tex.instances[0].instance_guid),
-    ]));
+    ap.remap_imports(&HashMap::from([(t_tex.file_guid, tex.file_guid), (t_tex.instances[0].instance_guid, tex.instances[0].instance_guid)]));
     out.push(("ap".into(), write(&ap)));
     // holo preset with the foil mode switched (Pearl -> Frost)
     let mut hap = g.clone_doc(&t["holo_ap"], &format!("{p}{base}_holo_ap"));
@@ -138,10 +137,7 @@ fn build_edits_match_python() {
     out.push(("thumb".into(), write(&th)));
     let cdn_name = format!("thumbnail/cdn/img_own_{base}");
     let mut cdn = g.clone_doc(&t["cdn"], &cdn_name);
-    cdn.remap_imports(&HashMap::from([
-        (t_thumb.file_guid, th.file_guid),
-        (t_thumb.instances[0].instance_guid, th.instances[0].instance_guid),
-    ]));
+    cdn.remap_imports(&HashMap::from([(t_thumb.file_guid, th.file_guid), (t_thumb.instances[0].instance_guid, th.instances[0].instance_guid)]));
     cdn.set("NameHash", Data::UInt(djb32(&cdn_name)), 0).unwrap();
     out.push(("cdn".into(), write(&cdn)));
 
@@ -206,10 +202,7 @@ fn build_edits_match_python() {
 
     // the effect asset: attachments on the board, one per truck (aura) and just one (nyan)
     let mut aura_asset_ref = None;
-    for (label, points, blueprint) in [
-        ("aura_asset", vec![[0.0, 0.03, 0.205], [0.0, 0.03, -0.205]], &bp),
-        ("nyan_asset", vec![[0.0, 0.03, 0.0]], &nb),
-    ] {
+    for (label, points, blueprint) in [("aura_asset", vec![[0.0, 0.03, 0.205], [0.0, 0.03, -0.205]], &bp), ("nyan_asset", vec![[0.0, 0.03, 0.0]], &nb)] {
         let mut va = g.clone_doc(&t["va"], &format!("characters/vfx/caveman/{base}_{label}"));
         let items = va.instances_of("SkaterVfxTriggerableItem");
         let used: Vec<usize> = items[..points.len()].to_vec();
@@ -245,10 +238,7 @@ fn build_edits_match_python() {
     let mut item = g.clone_doc(&t["item"], &format!("items/board_bottomart/own_{base}"));
     item.set("Key", key.as_str(), 0).unwrap();
     item.set("HashedAssetKey", Data::UInt(djb32(&key)), 0).unwrap();
-    item.remap_imports(&HashMap::from([
-        (t_cdn.file_guid, cdn.file_guid),
-        (t_cdn.instances[0].instance_guid, cdn.instances[0].instance_guid),
-    ]));
+    item.remap_imports(&HashMap::from([(t_cdn.file_guid, cdn.file_guid), (t_cdn.instances[0].instance_guid, cdn.instances[0].instance_guid)]));
     let di = item.instances_of("DelMarCustomizationItemData")[0];
     item.set("AssetPaths[0].AssetName", format!("{base}_ap"), di).unwrap();
     let ptr = item.add_import(aura_asset_ref.unwrap());

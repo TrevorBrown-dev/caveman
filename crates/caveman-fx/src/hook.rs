@@ -153,7 +153,7 @@ pub fn slot() -> usize {
 /// # Safety
 /// `slot` must be an 8-byte aligned pointer slot of this process.
 unsafe fn swap(slot: usize, from: usize, to: usize) -> Result<(), String> {
-    if slot % 8 != 0 || win::read_ptr(slot).is_none() {
+    if !slot.is_multiple_of(8) || win::read_ptr(slot).is_none() {
         return Err(format!("slot {slot:#x} is not readable"));
     }
     let mut old = 0u32;

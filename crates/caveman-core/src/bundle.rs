@@ -230,9 +230,8 @@ pub fn read_manifest(d: &[u8]) -> Result<Manifest, BundleError> {
     let strings = u(24)? as usize + 4;
     let (meta_off, meta_size) = (u(28)? as usize, u(32)? as usize);
     let mut at = 36;
-    let hash = |i: usize| -> Result<[u8; 20], BundleError> {
-        Ok(d.get(36 + 20 * i..56 + 20 * i).ok_or(BundleError::Truncated("SHA-1"))?.try_into().expect("20"))
-    };
+    let hash =
+        |i: usize| -> Result<[u8; 20], BundleError> { Ok(d.get(36 + 20 * i..56 + 20 * i).ok_or(BundleError::Truncated("SHA-1"))?.try_into().expect("20")) };
     if total < ne + nr + nc {
         return Err(BundleError::Truncated("asset counts"));
     }
@@ -249,14 +248,7 @@ pub fn read_manifest(d: &[u8]) -> Result<Manifest, BundleError> {
     }
     let mut res = Vec::with_capacity(nr);
     for i in 0..nr {
-        res.push(ManifestRes {
-            name: name(u(at)? as usize)?,
-            size: u(at + 4)?,
-            sha1: hash(ne + i)?,
-            rtype: 0,
-            meta: [0; 16],
-            rid: 0,
-        });
+        res.push(ManifestRes { name: name(u(at)? as usize)?, size: u(at + 4)?, sha1: hash(ne + i)?, rtype: 0, meta: [0; 16], rid: 0 });
         at += 8;
     }
     for r in res.iter_mut() {
@@ -277,19 +269,11 @@ pub fn read_manifest(d: &[u8]) -> Result<Manifest, BundleError> {
         if endian == Endian::Big {
             g.reverse();
         }
-        chunks.push(ManifestChunk {
-            guid: Guid::from_le_bytes(g),
-            logical_offset: u(at + 16)?,
-            logical_size: u(at + 20)?,
-            sha1: hash(ne + nr + i)?,
-        });
+        chunks.push(ManifestChunk { guid: Guid::from_le_bytes(g), logical_offset: u(at + 16)?, logical_size: u(at + 20)?, sha1: hash(ne + nr + i)? });
         at += 24;
     }
-    let chunk_meta = if meta_size != 0 {
-        d.get(4 + meta_off..4 + meta_off + meta_size).ok_or(BundleError::Truncated("chunk metadata"))?.to_vec()
-    } else {
-        Vec::new()
-    };
+    let chunk_meta =
+        if meta_size != 0 { d.get(4 + meta_off..4 + meta_off + meta_size).ok_or(BundleError::Truncated("chunk metadata"))?.to_vec() } else { Vec::new() };
     Ok(Manifest { endian, ebx, res, chunks, chunk_meta })
 }
 

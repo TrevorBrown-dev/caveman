@@ -161,14 +161,9 @@ impl Handles {
         let mut out = vec![0u8; size as usize];
         let mut done = 0;
         while done < out.len() {
-            let n = file
-                .seek_read(&mut out[done..], offset as u64 + done as u64)
-                .map_err(|e| GameError::Io(path.to_path_buf(), e))?;
+            let n = file.seek_read(&mut out[done..], offset as u64 + done as u64).map_err(|e| GameError::Io(path.to_path_buf(), e))?;
             if n == 0 {
-                return Err(GameError::Io(
-                    path.to_path_buf(),
-                    std::io::Error::new(std::io::ErrorKind::UnexpectedEof, "read past the end of the archive"),
-                ));
+                return Err(GameError::Io(path.to_path_buf(), std::io::Error::new(std::io::ErrorKind::UnexpectedEof, "read past the end of the archive")));
             }
             done += n;
         }
@@ -194,13 +189,7 @@ impl Game {
         let layout = data.join("layout.toc");
         let raw = std::fs::read(&layout).map_err(|e| GameError::Io(layout.clone(), e))?;
         let installs = install_packages(&raw, &data)?;
-        Ok(Game {
-            root: root.to_path_buf(),
-            data,
-            installs,
-            handles: Handles::default(),
-            tocs: Mutex::new(HashMap::new()),
-        })
+        Ok(Game { root: root.to_path_buf(), data, installs, handles: Handles::default(), tocs: Mutex::new(HashMap::new()) })
     }
 
     /// The game folder.

@@ -190,10 +190,7 @@ fn encode_block(px: &[[f32; 4]; 16], ch: usize) -> [u8; 16] {
     let det = aa * bb - ab * ab;
     let ok = det.abs() > 1e-6f32;
     let (r0, r1): (Vec<f64>, Vec<f64>) = if ok {
-        (
-            (0..ch).map(|c| ((bb * ax[c] - ab * bx[c]) / det) as f64).collect(),
-            (0..ch).map(|c| ((aa * bx[c] - ab * ax[c]) / det) as f64).collect(),
-        )
+        ((0..ch).map(|c| ((bb * ax[c] - ab * bx[c]) / det) as f64).collect(), (0..ch).map(|c| ((aa * bx[c] - ab * ax[c]) / det) as f64).collect())
     } else {
         (e0.clone(), e1.clone())
     };

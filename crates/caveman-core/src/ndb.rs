@@ -95,15 +95,7 @@ fn latin1(b: &[u8]) -> String {
 impl Node {
     /// A new named value.
     pub fn named(kind: u8, name: &str, payload: Vec<u8>) -> Node {
-        Node {
-            kind,
-            extra: 0,
-            named: true,
-            terminated: false,
-            name: name.chars().map(|c| c as u32 as u8).collect(),
-            payload,
-            children: Vec::new(),
-        }
+        Node { kind, extra: 0, named: true, terminated: false, name: name.chars().map(|c| c as u32 as u8).collect(), payload, children: Vec::new() }
     }
 
     /// The name as text (latin-1).
@@ -195,15 +187,7 @@ fn read_at(data: &[u8], mut pos: usize) -> Result<(Node, usize), NdbError> {
     let start = pos;
     let tag = *data.get(pos).ok_or(NdbError::Truncated(pos))?;
     pos += 1;
-    let mut node = Node {
-        kind: tag & 31,
-        extra: tag & 0x60,
-        named: false,
-        terminated: false,
-        name: Vec::new(),
-        payload: Vec::new(),
-        children: Vec::new(),
-    };
+    let mut node = Node { kind: tag & 31, extra: tag & 0x60, named: false, terminated: false, name: Vec::new(), payload: Vec::new(), children: Vec::new() };
     if node.kind == types::END {
         return Ok((node, pos));
     }

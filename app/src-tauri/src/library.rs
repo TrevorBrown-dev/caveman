@@ -8,6 +8,7 @@ use std::time::UNIX_EPOCH;
 
 use caveman_cli::names::{self, Found, Kind, PREVIEWS};
 use caveman_cli::report::Reporter;
+use caveman_cli::selection::OffList;
 use caveman_core::settings::{self, Settings};
 use serde::Serialize;
 use serde_json::Value;
@@ -39,6 +40,8 @@ pub struct LibraryItem {
     pub colour: Option<String>,
     /// The PNG's last change, in milliseconds (cache-busting for images).
     pub modified: u64,
+    /// Goes into the game (not in the drop folder's `.caveman-off.json`).
+    pub enabled: bool,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -75,12 +78,7 @@ impl Write for Lines {
 }
 
 fn modified(path: &Path) -> u64 {
-    std::fs::metadata(path)
-        .and_then(|m| m.modified())
-        .ok()
-        .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
-        .map(|d| d.as_millis() as u64)
-        .unwrap_or(0)
+    std::fs::metadata(path).and_then(|m| m.modified()).ok().and_then(|t| t.duration_since(UNIX_EPOCH).ok()).map(|d| d.as_millis() as u64).unwrap_or(0)
 }
 
 fn group(root: &Path, path: &Path) -> String {
@@ -88,7 +86,7 @@ fn group(root: &Path, path: &Path) -> String {
     parent.strip_prefix(root).map(|p| p.to_string_lossy().replace('\\', "/")).unwrap_or_default()
 }
 
-fn item(f: &Found, root: &Path, previews: &Path) -> LibraryItem {
+fn item(f: &Found, root: &Path, previews: &Path, off: &OffList) -> LibraryItem {
     let stem = f.path.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
     let preview = previews.join(format!("{}.png", f.display));
     let (kind, settings, colour) = match f.kind {
@@ -97,6 +95,8 @@ fn item(f: &Found, root: &Path, previews: &Path) -> LibraryItem {
             ("deck", serde_json::to_value(&s).unwrap_or(Value::Null), None)
         }
         Kind::Wheel => ("wheel", Value::Null, Some(format!("#{:02x}{:02x}{:02x}", f.colour[0], f.colour[1], f.colour[2]))),
+        Kind::Grip => ("grip", Value::Null, f.paint.map(|c| format!("#{:02x}{:02x}{:02x}", c[0], c[1], c[2]))),
+        Kind::Pattern => ("pattern", Value::Null, None),
     };
     LibraryItem {
         kind,
@@ -112,7 +112,23 @@ fn item(f: &Found, root: &Path, previews: &Path) -> LibraryItem {
         preview: if preview.is_file() { Some(preview.display().to_string()) } else { None },
         colour,
         modified: modified(&f.path),
+        enabled: !off.is_off(root, &f.path),
     }
+}
+
+/// Switches one deck or wheel off or on in its drop folder's `.caveman-off.json` (the root is the folder the file is
+/// under: decks or wheels, by `kind`).
+pub fn set_off(config: &Config, kind: &str, source: &Path, off: bool) -> Result<bool, String> {
+    let root = if kind == "wheel" { config.wheels_dir() } else { config.decks_dir() };
+    let (mut list, problem) = OffList::load(&root);
+    if let Some(p) = problem {
+        return Err(format!("the switch file cannot be read: {p}"));
+    }
+    let changed = list.set(&root, source, off);
+    if changed {
+        list.save(&root).map_err(|e| format!("{}: {e}", OffList::path(&root).display()))?;
+    }
+    Ok(changed)
 }
 
 /// Scans both drop folders (without changing anything: missing folders are reported empty).
@@ -129,8 +145,10 @@ pub fn scan(config: &Config) -> Library {
         names::scan_wheels(&wheels_dir, "", true, &mut report, &mut found);
     }
     let (deck_previews, wheel_previews) = (decks_dir.join(PREVIEWS), wheels_dir.join(PREVIEWS));
-    let decks = found[..n_decks].iter().map(|f| item(f, &decks_dir, &deck_previews)).collect();
-    let wheels = found[n_decks..].iter().map(|f| item(f, &wheels_dir, &wheel_previews)).collect();
+    let (off_decks, _) = OffList::load(&decks_dir);
+    let (off_wheels, _) = OffList::load(&wheels_dir);
+    let decks = found[..n_decks].iter().map(|f| item(f, &decks_dir, &deck_previews, &off_decks)).collect();
+    let wheels = found[n_decks..].iter().map(|f| item(f, &wheels_dir, &wheel_previews, &off_wheels)).collect();
     let text = String::from_utf8_lossy(&lines.0.lock().unwrap()).into_owned();
     let problems = text
         .lines()

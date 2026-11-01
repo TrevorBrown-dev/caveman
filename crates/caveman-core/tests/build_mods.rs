@@ -135,7 +135,7 @@ fn build_drop_folder() {
     let decks = decks_from_folder(&g, &scratch().join("buildport").join("decks"));
     assert!(!decks.is_empty(), "no PNGs in buildport/decks");
     let start = Instant::now();
-    let report = build::build(g, &decks, &[], &out_dir("decks"), "Caveman-Decks", &BuildOptions::default(), &mut log).unwrap();
+    let report = build::build(g, &decks, &[], &[], &[], &out_dir("decks"), "Caveman-Decks", &BuildOptions::default(), &mut log).unwrap();
     println!("built {} decks in {:.2} s ({} KB of cas)", report.decks.len(), start.elapsed().as_secs_f64(), report.cas_bytes / 1024);
 }
 
@@ -200,11 +200,8 @@ fn calibration_decks(game: &Game) -> Vec<DeckSpec> {
         ("FX Neon", effects::EFFECT_NEON, 64),
     ] {
         let full = format!("Caveman {name}");
-        let layers = Layers {
-            osk: Some(dmask.to_rgb()),
-            rgb: Some(effects::mark(&Image::new(512, 2048, 3), effect, effects::FX_SPEED, glow)),
-            ..Layers::default()
-        };
+        let layers =
+            Layers { osk: Some(dmask.to_rgb()), rgb: Some(effects::mark(&Image::new(512, 2048, 3), effect, effects::FX_SPEED, glow)), ..Layers::default() };
         push(&full, art(&full), layers);
     }
     for (label, steps, trigger) in [
@@ -226,7 +223,7 @@ fn build_calibration() {
     let g = game();
     let decks = calibration_decks(&g);
     let start = Instant::now();
-    let report = build::build(g, &decks, &[], &out_dir("finishes"), "Caveman-Finishes-Test", &BuildOptions::default(), &mut log).unwrap();
+    let report = build::build(g, &decks, &[], &[], &[], &out_dir("finishes"), "Caveman-Finishes-Test", &BuildOptions::default(), &mut log).unwrap();
     println!("built {} calibration decks in {:.2} s", report.decks.len(), start.elapsed().as_secs_f64());
 }
 
@@ -235,7 +232,7 @@ fn build_calibration() {
 fn build_wheels() {
     let g = game();
     let start = Instant::now();
-    let report = build::build(g, &[], &wheels_from_faces(), &out_dir("wheels"), "Caveman-Wheels-Test", &BuildOptions::default(), &mut log).unwrap();
+    let report = build::build(g, &[], &wheels_from_faces(), &[], &[], &out_dir("wheels"), "Caveman-Wheels-Test", &BuildOptions::default(), &mut log).unwrap();
     println!("built {} wheels in {:.2} s", report.wheels.len(), start.elapsed().as_secs_f64());
     for w in &report.wheels {
         let mut bg = Image::filled(768, 768, &[60, 60, 70, 255]);
@@ -266,6 +263,8 @@ fn build_decks_and_wheels() {
         ),
     ];
     let start = Instant::now();
-    let report = build::build(g, &decks, &wheels_from_faces()[..2], &out_dir("combined"), "Caveman-Combined-Test", &BuildOptions::default(), &mut log).unwrap();
+    let report =
+        build::build(g, &decks, &wheels_from_faces()[..2], &[], &[], &out_dir("combined"), "Caveman-Combined-Test", &BuildOptions::default(), &mut log)
+            .unwrap();
     println!("built {} decks and {} wheels in {:.2} s", report.decks.len(), report.wheels.len(), start.elapsed().as_secs_f64());
 }

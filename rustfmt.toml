@@ -1,0 +1,6 @@
+# The one formatter setting that matters here: wide lines. The code was written at a wide window, with one idea per
+# line and the comments hand-wrapped at about 120 columns (rustfmt leaves comments alone). `cargo fmt --all` is what CI
+# checks; run it before pushing.
+max_width = 160
+use_small_heuristics = "Max"
+newline_style = "Unix"

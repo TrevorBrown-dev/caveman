@@ -59,12 +59,7 @@ impl Mapping {
         let cols = json_numbers(text, "thumb_cols")?;
         let art = json_numbers(text, "art_cols")?;
         let poly = json_numbers(text, "poly")?;
-        Some(Mapping {
-            thumb_size,
-            thumb_cols: [*cols.first()?, *cols.get(1)?],
-            art_cols: [*art.first()? as usize, *art.get(1)? as usize],
-            poly,
-        })
+        Some(Mapping { thumb_size, thumb_cols: [*cols.first()?, *cols.get(1)?], art_cols: [*art.first()? as usize, *art.get(1)? as usize], poly })
     }
 }
 
@@ -417,8 +412,7 @@ pub fn map_wheel(tex: &Field, size: usize) -> Field {
             let x1 = (x0 + 1).min(511);
             let fx = ax - x0 as f64;
             for c in 0..3 {
-                let v = (tex.at(x0, y0, c) * (1.0 - fx) + tex.at(x1, y0, c) * fx) * (1.0 - fy)
-                    + (tex.at(x0, y1, c) * (1.0 - fx) + tex.at(x1, y1, c) * fx) * fy;
+                let v = (tex.at(x0, y0, c) * (1.0 - fx) + tex.at(x1, y0, c) * fx) * (1.0 - fy) + (tex.at(x0, y1, c) * (1.0 - fx) + tex.at(x1, y1, c) * fx) * fy;
                 full.data[(y * 768 + x) * 3 + c] = v;
             }
         }
@@ -454,6 +448,63 @@ pub fn fit_wheel_light(pairs: &[(Field, Image)], size: usize) -> Lighting {
 }
 
 /// newwheel.render_thumbnail: a wheel texture on the disc with the fitted light and sheen. Returns RGBA.
+/// A menu thumbnail of the deck seen from above, as the game draws its grip colours and patterns: `shape` is a stock
+/// thumbnail of that kind (its alpha is the deck's outline at 256 or 768 px), `top` the grip's colour map (RGB,
+/// 512 x 2048, the top face filling it, the nose at the top), `holes` a cutout mask of the same size (255 where the
+/// grip is; None for a whole grip), `wood` and `wood_mask` the wood's colour map and mask (the top face in their left
+/// half: the wood shows through the holes, and its bolt heads, marked in the mask's B, through the grip). The deck's
+/// bounding box in the shape is the texture's whole frame; RGBA with the shape's alpha.
+pub fn render_top(top: &Image, holes: Option<&Image>, wood: &Image, wood_mask: &Image, shape: &Image) -> Image {
+    let shape = shape.to_rgba();
+    let (w, h) = (shape.width, shape.height);
+    let (mut x0, mut y0, mut x1, mut y1) = (w, h, 0usize, 0usize);
+    for y in 0..h {
+        for x in 0..w {
+            if shape.pixel(x, y)[3] > 8 {
+                x0 = x0.min(x);
+                y0 = y0.min(y);
+                x1 = x1.max(x + 1);
+                y1 = y1.max(y + 1);
+            }
+        }
+    }
+    let mut out = Image::new(w, h, 4);
+    if x1 <= x0 || y1 <= y0 {
+        return out;
+    }
+    let top = top.to_rgb();
+    let wood = wood.to_rgb();
+    let wood_mask = wood_mask.to_rgb();
+    let sample = |img: &Image, u: f64, v: f64| -> [u8; 3] {
+        let x = ((u * img.width as f64) as usize).min(img.width - 1);
+        let y = ((v * img.height as f64) as usize).min(img.height - 1);
+        let p = img.pixel(x, y);
+        [p[0], p[1], p[2]]
+    };
+    for y in y0..y1 {
+        for x in x0..x1 {
+            let a = shape.pixel(x, y)[3];
+            if a == 0 {
+                continue;
+            }
+            let u = (x as f64 + 0.5 - x0 as f64) / (x1 - x0) as f64;
+            let v = (y as f64 + 0.5 - y0 as f64) / (y1 - y0) as f64;
+            // the wood's top face is the left half of its texture, in the same frame (knowledge/board-rig.md)
+            let (wu, wv) = (0.5 * u + 0.005, 0.064 + 0.936 * v);
+            let cut = holes.is_some_and(|m| {
+                let p = m.pixel(((u * m.width as f64) as usize).min(m.width - 1), ((v * m.height as f64) as usize).min(m.height - 1));
+                p[0] < 128
+            });
+            let bolt = sample(&wood_mask, wu, wv)[2] > 128;
+            let rgb = if cut || bolt { sample(&wood, wu, wv) } else { sample(&top, u, v) };
+            let px = out.pixel_mut(x, y);
+            px[..3].copy_from_slice(&rgb);
+            px[3] = a;
+        }
+    }
+    out
+}
+
 pub fn render_wheel(tex: &Field, lighting: &Lighting) -> Image {
     let size = lighting.light.width;
     let mapped = map_wheel(tex, size);

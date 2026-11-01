@@ -123,6 +123,10 @@ pub fn item_key(display: &str) -> String {
 pub enum Kind {
     Deck,
     Wheel,
+    /// A grip (the game's "grip colour"): a print on the grip tape, a plain colour, or both (scan_grips).
+    Grip,
+    /// A grip pattern (the game's cutout): a mask that cuts the grip away where the wood should show (scan_patterns).
+    Pattern,
 }
 
 /// One image to build.
@@ -138,6 +142,8 @@ pub struct Found {
     pub settings: Option<Settings>,
     /// A wheel's colour (white when the name has none).
     pub colour: [u8; 3],
+    /// A deck's colour behind transparent art (settings `colour`, else the hex in its name); None: natural wood.
+    pub paint: Option<[u8; 3]>,
     /// What was left out of the name's effects, and later what fitting the art did.
     pub notes: Vec<String>,
     /// An animated deck: the file is a clip ("gif" or "video", anim::clip_kind), not a PNG.
@@ -179,23 +185,24 @@ pub fn scan_decks(folder: &Path, prefix: &str, top: bool, report: &mut Reporter,
             }
             Ok(Some(s)) => {
                 let name = clean_name(&format!("{prefix}{}", s.name.as_deref().unwrap_or(&stem)));
-                let display = if s.name.is_some() { name.clone() } else { display_name(&name, &s.effect_words(), s.colour()) };
-                (name, display, s.effects(), Some(s), Vec::new())
+                let paint = s.paint().or(colour);
+                let display = if s.name.is_some() { name.clone() } else { display_name(&name, &s.effect_words(), paint.or(s.colour())) };
+                (name, display, s.effects(), Some(s), Vec::new(), paint)
             }
             Ok(None) => {
                 let name = clean_name(&format!("{prefix}{stem}"));
                 let (e, names, notes) = DeckEffects::from_suffixes(&words, colour);
                 let display = display_name(&name, &names, colour);
-                (name, display, e, None, notes)
+                (name, display, e, None, notes, colour)
             }
         };
-        let (name, display, effects, settings, notes) = found;
+        let (name, display, effects, settings, notes, paint) = found;
         if name.is_empty() {
             report.skipped(Kind::Deck, &path, "no usable letters or digits in its name");
             continue;
         }
         let key = item_key(&display);
-        out.push(Found { kind: Kind::Deck, path, display, key, effects, settings, colour: [255; 3], notes, clip });
+        out.push(Found { kind: Kind::Deck, path, display, key, effects, settings, colour: [255; 3], paint, notes, clip });
     }
 }
 
@@ -222,7 +229,124 @@ pub fn scan_wheels(folder: &Path, prefix: &str, top: bool, report: &mut Reporter
         }
         let key = item_key(&display);
         let colour = colour.unwrap_or([255, 255, 255]);
-        out.push(Found { kind: Kind::Wheel, path, display, key, effects: DeckEffects::default(), settings: None, colour, notes: Vec::new(), clip: None });
+        out.push(Found {
+            kind: Kind::Wheel,
+            path,
+            display,
+            key,
+            effects: DeckEffects::default(),
+            settings: None,
+            colour,
+            paint: None,
+            notes: Vec::new(),
+            clip: None,
+        });
+    }
+}
+
+/// The grips folder (`Caveman\Grips`): `Name.png` is a picture printed on the grip tape (its transparent parts show
+/// the grit), `Name.ff69b4.png` the same over grit in that colour, and `Name.ff69b4.grip` (any contents, usually
+/// empty) plain grip in that colour. Subfolders prefix the name as for decks. The colour goes in `paint`.
+pub fn scan_grips(folder: &Path, prefix: &str, top: bool, report: &mut Reporter, out: &mut Vec<Found>) {
+    for entry in sorted_entries(folder) {
+        let path = folder.join(&entry);
+        if path.is_dir() {
+            if entry.starts_with('.') || (top && entry.to_lowercase() == PREVIEWS) {
+                continue;
+            }
+            scan_grips(&path, &format!("{prefix}{entry} - "), false, report, out);
+            continue;
+        }
+        let lower = entry.to_lowercase();
+        let (stem_end, plain) = if lower.ends_with(".png") {
+            (entry.len() - 4, false)
+        } else if lower.ends_with(".grip") {
+            (entry.len() - 5, true)
+        } else {
+            continue;
+        };
+        if !path.is_file() {
+            continue;
+        }
+        let (stem, _, colour) = peel(&entry[..stem_end], false);
+        let display = clean_name(&format!("{prefix}{stem}"));
+        if display.is_empty() {
+            report.skipped(Kind::Grip, &path, "no usable letters or digits in its name");
+            continue;
+        }
+        if plain && colour.is_none() {
+            report.skipped(Kind::Grip, &path, "a plain grip needs its colour in the name, like Hot Pink.ff69b4.grip");
+            continue;
+        }
+        let key = grip_key(&display);
+        out.push(Found {
+            kind: Kind::Grip,
+            path,
+            display,
+            key,
+            effects: DeckEffects::default(),
+            settings: None,
+            colour: colour.unwrap_or([255, 255, 255]),
+            paint: colour,
+            notes: Vec::new(),
+            clip: None,
+        })
+    }
+}
+
+/// The grip patterns folder (`Caveman\Patterns`): PNG masks (build::fit_mask reads their transparency, else their
+/// lightness: clear or dark parts cut the grip away).
+pub fn scan_patterns(folder: &Path, prefix: &str, top: bool, report: &mut Reporter, out: &mut Vec<Found>) {
+    for entry in sorted_entries(folder) {
+        let path = folder.join(&entry);
+        if path.is_dir() {
+            if entry.starts_with('.') || (top && entry.to_lowercase() == PREVIEWS) {
+                continue;
+            }
+            scan_patterns(&path, &format!("{prefix}{entry} - "), false, report, out);
+            continue;
+        }
+        if !entry.to_lowercase().ends_with(".png") || !path.is_file() {
+            continue;
+        }
+        let (stem, _, _) = peel(&entry[..entry.len() - 4], false);
+        let display = clean_name(&format!("{prefix}{stem}"));
+        if display.is_empty() {
+            report.skipped(Kind::Pattern, &path, "no usable letters or digits in its name");
+            continue;
+        }
+        let key = pattern_key(&display);
+        out.push(Found {
+            kind: Kind::Pattern,
+            path,
+            display,
+            key,
+            effects: DeckEffects::default(),
+            settings: None,
+            colour: [255, 255, 255],
+            paint: None,
+            notes: Vec::new(),
+            clip: None,
+        })
+    }
+}
+
+/// A grip's item key: `Own_Grip_` and the name, so a grip and a deck of the same name do not collide.
+pub fn grip_key(display: &str) -> String {
+    format!("Own_Grip_{}", display.replace(' ', "_"))
+}
+
+/// A grip pattern's item key: `Own_GripPattern_` and the name.
+pub fn pattern_key(display: &str) -> String {
+    format!("Own_GripPattern_{}", display.replace(' ', "_"))
+}
+
+/// A deck file's colour behind transparent art, as the scan finds it (settings `colour`, else the hex in its name).
+pub fn deck_paint(path: &Path) -> Option<[u8; 3]> {
+    let (_, _, colour) = peel(settings::art_stem(&file_name(path)), true);
+    match Settings::read_sidecar(path) {
+        Ok(Some(s)) => s.paint().or(colour),
+        _ => colour,
     }
 }
 
@@ -266,5 +390,24 @@ mod tests {
         assert_eq!(peel("Deck.aura.00ffff", true), ("Deck".into(), vec!["aura".into()], Some([0, 255, 255])));
         assert_eq!(peel("Wheel.ff0000", false), ("Wheel".into(), vec![], Some([255, 0, 0])));
         assert_eq!(peel("Wheel.foil", false).0, "Wheel.foil");
+    }
+
+    #[test]
+    fn deck_colour() {
+        let dir = std::env::temp_dir().join(format!("caveman-deck-colour-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let named = dir.join("Plain.ff0000.png");
+        let plain = dir.join("Wood.png");
+        let side = dir.join("Side.00ff00.png");
+        for p in [&named, &plain, &side] {
+            std::fs::write(p, b"").unwrap();
+        }
+        assert_eq!(deck_paint(&named), Some([255, 0, 0]));
+        assert_eq!(deck_paint(&plain), None);
+        assert_eq!(deck_paint(&side), Some([0, 255, 0]));
+        // a settings file's colour wins over the name's
+        std::fs::write(settings::sidecar_path(&side), br##"{"version": 1, "colour": "#0000ff"}"##).unwrap();
+        assert_eq!(deck_paint(&side), Some([0, 0, 255]));
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 }

@@ -162,13 +162,7 @@ fn read_fixup(r: &mut Reader, efix: Chunk, doc: &mut Document, data: &[u8]) -> R
         if class_ref as usize >= guids.len() {
             return err("EFIX instance type is invalid");
         }
-        doc.instances.push(InstanceRecord {
-            fixup_type: class_ref,
-            descriptor: None,
-            data_offset: offset,
-            exported: index < exported,
-            ..Default::default()
-        });
+        doc.instances.push(InstanceRecord { fixup_type: class_ref, descriptor: None, data_offset: offset, exported: index < exported, ..Default::default() });
     }
     doc.fixup_type_guids = guids;
     doc.fixup_type_signatures = sigs;
@@ -242,17 +236,7 @@ fn read_reflection(r: &mut Reader, rc: Chunk, hashed: bool, doc: &mut Document) 
         let alignment = r.u16()?;
         let (guid, signature) = ids.get(index).copied().unwrap_or_default();
         type_names.push(name_hash);
-        doc.types.push(TypeDescriptor {
-            name: String::new(),
-            name_hash,
-            field_index,
-            field_count,
-            encoded_type: et >> 1,
-            size,
-            alignment,
-            guid,
-            signature,
-        });
+        doc.types.push(TypeDescriptor { name: String::new(), name_hash, field_index, field_count, encoded_type: et >> 1, size, alignment, guid, signature });
     }
     let mut field_names = Vec::new();
     for _ in 0..r.count()? {
@@ -264,10 +248,7 @@ fn read_reflection(r: &mut Reader, rc: Chunk, hashed: bool, doc: &mut Document) 
         doc.fields.push(FieldDescriptor { name: String::new(), name_hash, encoded_type: et >> 1, class_ref, data_offset });
     }
     for t in &doc.types {
-        if t.field_index < 0
-            || t.field_index as usize > doc.fields.len()
-            || t.field_count as usize > doc.fields.len() - t.field_index as usize
-        {
+        if t.field_index < 0 || t.field_index as usize > doc.fields.len() || t.field_count as usize > doc.fields.len() - t.field_index as usize {
             return err("reflection type field range is invalid");
         }
     }
@@ -283,9 +264,7 @@ fn read_reflection(r: &mut Reader, rc: Chunk, hashed: bool, doc: &mut Document) 
             name_offsets.insert(h, o as usize);
         }
         let strings = r.pos;
-        let lookup = |h: u32| -> Result<usize> {
-            name_offsets.get(&h).copied().ok_or_else(|| Error(format!("reflection name {h:#x} is missing")))
-        };
+        let lookup = |h: u32| -> Result<usize> { name_offsets.get(&h).copied().ok_or_else(|| Error(format!("reflection name {h:#x} is missing"))) };
         for (t, h) in doc.types.iter_mut().zip(&type_names) {
             t.name = string_at(r.b, strings + lookup(*h)?, rc.2)?;
         }
@@ -475,12 +454,7 @@ impl<'a> ValueReader<'a> {
                 if encoded == 0 {
                     Data::TypeRef(TypeRef::default())
                 } else if encoded & 0x8000_0000 != 0 {
-                    Data::TypeRef(TypeRef {
-                        primitive: true,
-                        primitive_type: ((encoded & 0x7FFF_FFFF) >> 5) & 0x1F,
-                        descriptor: -1,
-                        encoded,
-                    })
+                    Data::TypeRef(TypeRef { primitive: true, primitive_type: ((encoded & 0x7FFF_FFFF) >> 5) & 0x1F, descriptor: -1, encoded })
                 } else {
                     Data::TypeRef(TypeRef { primitive: false, primitive_type: 0, descriptor: (encoded >> 2) as i64, encoded })
                 }
@@ -636,7 +610,5 @@ pub fn read_file_guid(data: &[u8]) -> Result<Guid> {
     let mut r = Reader::new(data);
     let (chunks, _) = chunks(&mut r)?;
     let efix = chunk(&chunks, b"EFIX", true)?.unwrap();
-    data.get(efix.1..efix.1 + 16)
-        .map(|b| Guid(b.try_into().unwrap()))
-        .ok_or_else(|| Error("EFIX is too short".into()))
+    data.get(efix.1..efix.1 + 16).map(|b| Guid(b.try_into().unwrap())).ok_or_else(|| Error("EFIX is too short".into()))
 }

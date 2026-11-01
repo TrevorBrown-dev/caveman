@@ -20,7 +20,7 @@ pub const IMPORTED: &str = "Imported";
 #[derive(Clone, Debug)]
 pub struct ImportArgs {
     pub game: PathBuf,
-    /// The decks folder (default `<game>\Caveman Decks`); packs go into its `Imported` subfolder unless `to` is given.
+    /// The decks folder (default `<game>\Caveman\Decks`); packs go into its `Imported` subfolder unless `to` is given.
     pub decks: Option<PathBuf>,
     /// Mod folders (a path, or a folder name in `<game>\Mods`).
     pub mods: Vec<String>,
@@ -86,7 +86,7 @@ fn caveman_built(dir: &std::path::Path) -> bool {
 /// Runs an import; returns the packs' reports.
 pub fn run_import(a: &ImportArgs, report: &mut Reporter) -> Result<Vec<PackReport>> {
     let mods_dir = a.game.join("Mods");
-    let to = a.to.clone().unwrap_or_else(|| a.decks.clone().unwrap_or_else(|| a.game.join("Caveman Decks")).join(IMPORTED));
+    let to = a.to.clone().unwrap_or_else(|| a.decks.clone().unwrap_or_else(|| crate::folders::decks(&a.game)).join(IMPORTED));
     let mut dirs: Vec<PathBuf> = Vec::new();
     if a.all {
         dirs.extend(import::mods_with_items(&mods_dir, &[]).into_iter().filter(|d| !caveman_built(d)));
@@ -131,11 +131,8 @@ pub fn run_import(a: &ImportArgs, report: &mut Reporter) -> Result<Vec<PackRepor
         if n_skip > 0 {
             text.push_str(&format!(", {n_skip} skipped"));
         }
-        let extras: Vec<String> = [(masks, "own mask"), (normals, "normal map"), (holos, "holo")]
-            .iter()
-            .filter(|(n, _)| *n > 0)
-            .map(|(n, w)| format!("{n} with {w}"))
-            .collect();
+        let extras: Vec<String> =
+            [(masks, "own mask"), (normals, "normal map"), (holos, "holo")].iter().filter(|(n, _)| *n > 0).map(|(n, w)| format!("{n} with {w}")).collect();
         if !extras.is_empty() {
             text.push_str(&format!(" ({})", extras.join(", ")));
         }

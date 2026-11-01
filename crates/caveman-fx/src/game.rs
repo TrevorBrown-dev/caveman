@@ -29,6 +29,22 @@ pub mod rva {
     pub const MANAGER_OFFSET: usize = 0x77abaa8;
     /// qword: the ANT instance registry singleton (read by 0x10c51e0, looked up by 0x10c4c70).
     pub const REGISTRY: usize = 0x728db10;
+    /// The Caveman's texture (board.rs; read live with skwatch, 2026-10-21): `TextureAsset`'s vtable (asset +0), its
+    /// slot 0 the shared getType (`GET_TYPE`), slot 1 the class's own function; its TypeInfo (asset +8: a static object
+    /// filled at start-up, whose +0 is the descriptor) and its descriptor (static; the first u32 is the type's name
+    /// hash, `board::TEXTURE_ASSET_HASH`).
+    pub const TEXTURE_ASSET_VTABLE: usize = 0x64ec390;
+    pub const TEXTURE_ASSET_SLOT1: usize = 0x3ee6730;
+    pub const TEXTURE_ASSET_TYPEINFO: usize = 0x76fb470;
+    pub const TEXTURE_ASSET_DESCRIPTOR: usize = 0x81f8cb0;
+    /// `mov rax, [rcx+8]; ret`: every typed object's getType (vtable slot 0).
+    pub const GET_TYPE: usize = 0x331b20;
+    /// The engine's runtime texture (`TextureAsset.Resource`, asset +0x20; 0x120 bytes) and its slot 0.
+    pub const RUNTIME_TEXTURE_VTABLE: usize = 0x6506c10;
+    pub const RUNTIME_TEXTURE_SLOT0: usize = 0x40a27e0;
+    /// RenderCore2's resource object (runtime texture +0x110: the same ID3D12Resource at its +0x118) and its slot 0.
+    pub const RC2_RESOURCE_VTABLE: usize = 0x658be10;
+    pub const RC2_RESOURCE_SLOT0: usize = 0x40e4d10;
 }
 
 /// Offsets inside the game's objects.
@@ -125,7 +141,17 @@ pub fn check_image_at(base: usize, pointer_base: usize) -> Result<(), String> {
             return Err(format!("{} at exe+{:#x} is unreadable", pin.what, pin.rva));
         }
         if got != want {
-            return Err(format!("{} at exe+{:#x} differs from build {BUILD}", pin.what, pin.rva));
+            // ReSkate (2.1.2 and later) detours some of these functions in place: a `jmp rel32` over their first
+            // bytes, the rest untouched. The layout the pin stands for is still this build's; the DLL never calls
+            // the code, so a detoured head is accepted when everything past it matches
+            let detoured = got.first() == Some(&0xE9) && want.len() > 8 && got[8..] == want[8..];
+            if !detoured {
+                return Err(format!("{} at exe+{:#x} differs from build {BUILD}", pin.what, pin.rva));
+            }
+            crate::worker::log(&format!(
+                "{} at exe+{:#x}: its first bytes are a jump (a hook of ReSkate's, most likely); the rest is build {BUILD}'s",
+                pin.what, pin.rva
+            ));
         }
     }
     let slot = base + rva::BOOL_VIEW_VTABLE + rva::BOOL_VIEW_GETTER_SLOT * 8;

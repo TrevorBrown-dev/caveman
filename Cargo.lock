@@ -275,7 +275,7 @@ dependencies = [
 
 [[package]]
 name = "caveman-app"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "caveman-cli",
  "caveman-core",
@@ -287,7 +287,7 @@ dependencies = [
 
 [[package]]
 name = "caveman-cli"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "caveman-core",
  "serde_json",
@@ -295,7 +295,7 @@ dependencies = [
 
 [[package]]
 name = "caveman-core"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "gif",
  "png 0.17.16",
@@ -306,7 +306,7 @@ dependencies = [
 
 [[package]]
 name = "caveman-fx"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -315,15 +315,18 @@ dependencies = [
 
 [[package]]
 name = "caveman-launcher"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "caveman-cli",
+ "serde_json",
 ]
 
 [[package]]
 name = "caveman-trainer"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
+ "caveman-cli",
+ "caveman-core",
  "caveman-fx",
  "serde_json",
 ]

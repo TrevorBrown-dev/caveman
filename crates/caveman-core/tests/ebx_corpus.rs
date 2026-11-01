@@ -10,7 +10,9 @@ use caveman_core::ebx;
 
 fn corpus_dir() -> PathBuf {
     std::env::var_os("CAVEMAN_EBX_CORPUS").map(PathBuf::from).unwrap_or_else(|| {
-        PathBuf::from(r"C:\Users\thetr\AppData\Local\Temp\claude\C--Users-thetr-Projects-ReSkate\c6d3c964-296a-4f0b-bedc-241e3cf960f6\scratchpad\ebxport\corpus")
+        PathBuf::from(
+            r"C:\Users\thetr\AppData\Local\Temp\claude\C--Users-thetr-Projects-ReSkate\c6d3c964-296a-4f0b-bedc-241e3cf960f6\scratchpad\ebxport\corpus",
+        )
     })
 }
 
@@ -50,8 +52,12 @@ fn round_trip(pack: &str) -> (usize, usize, usize) {
                 different += 1;
                 listing.push(name.clone());
                 if examples.len() < 10 {
-                    examples.push(format!("different: {name}: first difference at {:#x} (sizes {} -> {})",
-                        first_difference(&out, data), data.len(), out.len()));
+                    examples.push(format!(
+                        "different: {name}: first difference at {:#x} (sizes {} -> {})",
+                        first_difference(&out, data),
+                        data.len(),
+                        out.len()
+                    ));
                 }
             }
             Err(e) => {
@@ -120,8 +126,12 @@ fn matches_python(pack: &str) -> (usize, usize) {
         } else {
             differ += 1;
             if differ <= 10 {
-                println!("   different from Python: {name}: first difference at {:#x} (python {} rust {})",
-                    first_difference(&out, &r[1]), r[1].len(), out.len());
+                println!(
+                    "   different from Python: {name}: first difference at {:#x} (python {} rust {})",
+                    first_difference(&out, &r[1]),
+                    r[1].len(),
+                    out.len()
+                );
             }
         }
     }
@@ -156,8 +166,7 @@ fn compact_rewrite_matches_python() {
         } else {
             differ += 1;
             if differ <= 10 {
-                println!("   different: {name}: first difference at {:#x} (python {} rust {})",
-                    first_difference(&out, &r[2]), r[2].len(), out.len());
+                println!("   different: {name}: first difference at {:#x} (python {} rust {})", first_difference(&out, &r[2]), r[2].len(), out.len());
             }
         }
     }

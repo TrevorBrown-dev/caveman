@@ -1,130 +1,79 @@
-//! A BC1 encoder (opaque four-colour blocks): a port of `bc1.py` that writes the same blocks byte for byte.
-//! Each 4 x 4 block's endpoints are the ends of its colours along their main axis, quantized to RGB 565;
-//! each texel takes the nearest of the four palette colours. Wheel masks (`_osk`) are BC1 (format 54).
-//!
-//! Exactness: everything is float32 as in numpy (`np.ones(..., float32)` keeps the axis float32 here); the
-//! covariance and all dot products are sequential float32 sums (measured on numpy 2.4), rounding is numpy's
-//! half-to-even.
+//! A BC1 encoder, 4-colour mode only: per 4 x 4 block the two endpoints are the block's two texels farthest apart
+//! (its extremes along its spread), quantised to RGB565 and ordered so the first is the greater (the 4-colour mode),
+//! and each texel's index is the nearest of the four palette colours, interpolated as the decoder does. Plain and
+//! deterministic: it writes the world copy of The Caveman's graphic (the BC1 texture the game re-fills at every
+//! equip, `caveman-fx` board.rs), where exactness against the game's own encoder does not matter. Sizes that are
+//! not multiples of 4 are padded by repeating the edge.
 
-use crate::bc7::blocks;
 use crate::image::Image;
 
-/// BC1 blocks (8 bytes each, row-major by block) of an RGB or RGBA image; alpha is ignored (bc1.encode).
+/// BC1 blocks (8 bytes each, row-major by block) of an RGB or RGBA image (the alpha dropped).
 pub fn encode(img: &Image) -> Vec<u8> {
-    assert!(matches!(img.channels, 3 | 4), "BC1 encodes RGB or RGBA images");
-    let blocks = blocks(img);
-    let mut out = vec![0u8; blocks.len() * 8];
-    let threads = std::thread::available_parallelism().map(|n| n.get()).unwrap_or(1).min(16);
-    let per = blocks.len().div_ceil(threads).max(1);
-    std::thread::scope(|s| {
-        for (chunk_in, chunk_out) in blocks.chunks(per).zip(out.chunks_mut(per * 8)) {
-            s.spawn(move || {
-                for (b, o) in chunk_in.iter().zip(chunk_out.chunks_exact_mut(8)) {
-                    o.copy_from_slice(&encode_block(b));
-                }
-            });
+    let rgb = img.to_rgb();
+    let (w, h) = (rgb.width, rgb.height);
+    let (bw, bh) = (w.div_ceil(4), h.div_ceil(4));
+    let mut out = Vec::with_capacity(bw * bh * 8);
+    for by in 0..bh {
+        for bx in 0..bw {
+            let mut px = [[0u8; 3]; 16];
+            for (t, p) in px.iter_mut().enumerate() {
+                let sx = (bx * 4 + t % 4).min(w - 1);
+                let sy = (by * 4 + t / 4).min(h - 1);
+                let at = (sy * w + sx) * 3;
+                *p = [rgb.data[at], rgb.data[at + 1], rgb.data[at + 2]];
+            }
+            out.extend_from_slice(&encode_block(&px));
         }
-    });
+    }
     out
 }
 
-fn to565(c: [f32; 3]) -> u32 {
-    let c = c.map(|v| v.round_ties_even().clamp(0.0, 255.0));
-    let r = (c[0] * 31.0 / 255.0).round_ties_even() as u32;
-    let g = (c[1] * 63.0 / 255.0).round_ties_even() as u32;
-    let b = (c[2] * 31.0 / 255.0).round_ties_even() as u32;
-    (r << 11) | (g << 5) | b
+fn to565(c: [u8; 3]) -> u16 {
+    ((c[0] as u16 >> 3) << 11) | ((c[1] as u16 >> 2) << 5) | (c[2] as u16 >> 3)
 }
 
-fn from565(v: u32) -> [f32; 3] {
+fn from565(v: u16) -> [u8; 3] {
     let (r, g, b) = ((v >> 11) & 31, (v >> 5) & 63, v & 31);
-    [((r << 3) | (r >> 2)) as f32, ((g << 2) | (g >> 4)) as f32, ((b << 3) | (b >> 2)) as f32]
+    [((r << 3) | (r >> 2)) as u8, ((g << 2) | (g >> 4)) as u8, ((b << 3) | (b >> 2)) as u8]
 }
 
-fn encode_block(px: &[[f32; 4]; 16]) -> [u8; 8] {
-    let mut mean = [0f32; 3];
-    for c in 0..3 {
-        let mut s = 0f32;
-        for p in px {
-            s += p[c];
-        }
-        mean[c] = s / 16.0;
-    }
-    let mut d = [[0f32; 3]; 16];
-    for p in 0..16 {
-        for c in 0..3 {
-            d[p][c] = px[p][c] - mean[c];
-        }
-    }
-    let mut cov = [[0f32; 3]; 3];
-    for i in 0..3 {
-        for j in 0..3 {
-            let mut s = 0f32;
-            for p in &d {
-                s += p[i] * p[j];
+fn dist2(a: [u8; 3], b: [u8; 3]) -> i64 {
+    (0..3).map(|c| (a[c] as i64 - b[c] as i64).pow(2)).sum()
+}
+
+/// One block: 16 texels row-major.
+pub fn encode_block(px: &[[u8; 3]; 16]) -> [u8; 8] {
+    let (mut a, mut b, mut far) = (0usize, 0usize, -1i64);
+    for i in 0..16 {
+        for j in i..16 {
+            let d = dist2(px[i], px[j]);
+            if d > far {
+                far = d;
+                a = i;
+                b = j;
             }
-            cov[i][j] = s;
         }
     }
-    let mut axis = [1f32; 3];
-    for _ in 0..8 {
-        let mut next = [0f32; 3];
-        for i in 0..3 {
-            let mut s = 0f32;
-            for j in 0..3 {
-                s += cov[i][j] * axis[j];
-            }
-            next[i] = s;
-        }
-        let mut n = 0f32;
-        for v in next {
-            n += v * v;
-        }
-        let norm = n.sqrt().max(1e-6);
-        axis = next.map(|v| v / norm);
-    }
-    let mut tmin = f32::INFINITY;
-    let mut tmax = f32::NEG_INFINITY;
-    for p in &d {
-        let mut s = 0f32;
-        for i in 0..3 {
-            s += p[i] * axis[i];
-        }
-        tmin = tmin.min(s);
-        tmax = tmax.max(s);
-    }
-    let e0 = [0, 1, 2].map(|c| mean[c] + axis[c] * tmax);
-    let e1 = [0, 1, 2].map(|c| mean[c] + axis[c] * tmin);
-    let (mut c0, mut c1) = (to565(e0), to565(e1));
+    let (mut c0, mut c1) = (to565(px[a]), to565(px[b]));
     if c0 < c1 {
-        std::mem::swap(&mut c0, &mut c1); // four-colour mode needs c0 > c1
+        std::mem::swap(&mut c0, &mut c1);
     }
     let (p0, p1) = (from565(c0), from565(c1));
-    let pal = [
+    let mix = |x: u8, y: u8, wx: u32, wy: u32| ((x as u32 * wx + y as u32 * wy + 1) / 3) as u8;
+    let palette = [
         p0,
         p1,
-        [0, 1, 2].map(|c| (2.0 * p0[c] + p1[c]) / 3.0),
-        [0, 1, 2].map(|c| (p0[c] + 2.0 * p1[c]) / 3.0),
+        [mix(p0[0], p1[0], 2, 1), mix(p0[1], p1[1], 2, 1), mix(p0[2], p1[2], 2, 1)],
+        [mix(p0[0], p1[0], 1, 2), mix(p0[1], p1[1], 1, 2), mix(p0[2], p1[2], 1, 2)],
     ];
-    let mut bits = 0u32;
+    let mut idx = 0u32;
     if c0 != c1 {
-        for (p, colour) in px.iter().enumerate() {
-            let mut best = (f32::INFINITY, 0u32);
-            for (k, entry) in pal.iter().enumerate() {
-                let mut s = 0f32;
-                for c in 0..3 {
-                    let diff = colour[c] - entry[c];
-                    s += diff * diff;
-                }
-                if s < best.0 {
-                    best = (s, k as u32);
-                }
-            }
-            bits |= best.1 << (2 * p);
+        for (t, p) in px.iter().enumerate() {
+            let best = (0..4).min_by_key(|&k| dist2(*p, palette[k])).unwrap_or(0);
+            idx |= (best as u32) << (t * 2);
         }
-    } // a flat block: c0 == c1 is three-colour mode, index 0 is c0
-    let mut out = [0u8; 8];
-    out[..4].copy_from_slice(&(c0 | (c1 << 16)).to_le_bytes());
-    out[4..].copy_from_slice(&bits.to_le_bytes());
-    out
+    }
+    // (equal endpoints: the 3-colour mode, every index 0: the colour itself)
+    let [i0, i1, i2, i3] = idx.to_le_bytes();
+    [c0 as u8, (c0 >> 8) as u8, c1 as u8, (c1 >> 8) as u8, i0, i1, i2, i3]
 }

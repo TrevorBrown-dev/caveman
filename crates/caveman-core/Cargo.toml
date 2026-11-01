@@ -3,6 +3,8 @@ name = "caveman-core"
 description = "Caveman's engine: skate. game data readers and writers, texture encoders, the deck build, effects"
 edition.workspace = true
 version.workspace = true
+license.workspace = true
+repository.workspace = true
 
 [dependencies]
 # Keep this list short: Windows APIs (Oodle, DXC COM, process checks) are called directly, as launcher/ does.
@@ -11,3 +13,6 @@ sha1_smol = "1"       # bundle manifest SHA-1s
 serde = { version = "1", features = ["derive"] }   # the per-deck settings files (settings.rs)
 serde_json = "1"
 gif = "0.14"          # animated decks: GIF frames in (anim.rs); the encoder writes the test animation
+
+[lints]
+workspace = true

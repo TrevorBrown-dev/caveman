@@ -57,9 +57,35 @@ pub const CAT_ARRAY: u16 = 4;
 /// The name ebx.py's `TYPE_NAMES` gives a field type.
 pub fn type_name_of(t: u16) -> &'static str {
     const NAMES: [&str; 29] = [
-        "inherited", "dbobject", "structure", "pointer", "array", "fixed_array", "string", "cstring", "enum",
-        "fileref", "bool", "int8", "uint8", "int16", "uint16", "int32", "uint32", "uint64", "int64", "float32",
-        "float64", "guid", "sha1", "resourceref", "function", "typeref", "boxedvalueref", "interface", "delegate",
+        "inherited",
+        "dbobject",
+        "structure",
+        "pointer",
+        "array",
+        "fixed_array",
+        "string",
+        "cstring",
+        "enum",
+        "fileref",
+        "bool",
+        "int8",
+        "uint8",
+        "int16",
+        "uint16",
+        "int32",
+        "uint32",
+        "uint64",
+        "int64",
+        "float32",
+        "float64",
+        "guid",
+        "sha1",
+        "resourceref",
+        "function",
+        "typeref",
+        "boxedvalueref",
+        "interface",
+        "delegate",
     ];
     NAMES.get(t as usize).copied().unwrap_or("?")
 }
@@ -511,11 +537,7 @@ fn walk<'a>(obj: &'a Object, path: &str) -> Result<&'a Value> {
         let field = obj.find(name).ok_or_else(|| Error(format!("no field {name:?} in {path:?}")))?;
         let mut value = &field.value;
         for i in indices {
-            value = value
-                .data
-                .as_array()
-                .and_then(|a| a.get(i))
-                .ok_or_else(|| Error(format!("no element {i} in {path:?}")))?;
+            value = value.data.as_array().and_then(|a| a.get(i)).ok_or_else(|| Error(format!("no element {i} in {path:?}")))?;
         }
         if k + 1 == parts.len() {
             return Ok(value);
@@ -536,11 +558,7 @@ fn walk_mut_parts<'a>(obj: &'a mut Object, parts: &[String], path: &str) -> Resu
     let field = obj.find_mut(name).ok_or_else(|| Error(format!("no field {name:?} in {path:?}")))?;
     let mut value = &mut field.value;
     for i in indices {
-        value = value
-            .data
-            .as_array_mut()
-            .and_then(|a| a.get_mut(i))
-            .ok_or_else(|| Error(format!("no element {i} in {path:?}")))?;
+        value = value.data.as_array_mut().and_then(|a| a.get_mut(i)).ok_or_else(|| Error(format!("no element {i} in {path:?}")))?;
     }
     if parts.len() == 1 {
         return Ok(value);
@@ -730,17 +748,11 @@ impl Document {
 
     /// An instance's object.
     pub fn object(&self, instance: usize) -> Result<&Object> {
-        self.instances
-            .get(instance)
-            .and_then(|i| i.object.as_ref())
-            .ok_or_else(|| Error(format!("instance {instance} has no object")))
+        self.instances.get(instance).and_then(|i| i.object.as_ref()).ok_or_else(|| Error(format!("instance {instance} has no object")))
     }
 
     pub fn object_mut(&mut self, instance: usize) -> Result<&mut Object> {
-        self.instances
-            .get_mut(instance)
-            .and_then(|i| i.object.as_mut())
-            .ok_or_else(|| Error(format!("instance {instance} has no object")))
+        self.instances.get_mut(instance).and_then(|i| i.object.as_mut()).ok_or_else(|| Error(format!("instance {instance} has no object")))
     }
 
     /// A field's data by path from an instance's object (ebx.py `get`).

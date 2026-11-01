@@ -48,7 +48,8 @@ function mockBackend(): Plugin {
 export default defineConfig(({ mode }) => ({
   plugins: [svelte(), ...(mode === 'mock' ? [mockBackend()] : [])],
   clearScreen: false,
-  server: { port: 5173, strictPort: true },
+  // fs.allow: the changelog (../CHANGELOG.md) is imported from outside app/ (lib/changelog.ts)
+  server: { port: 5173, strictPort: true, fs: { allow: ['..'] } },
   envPrefix: ['VITE_', 'TAURI_ENV_'],
   build: {
     target: 'es2022',

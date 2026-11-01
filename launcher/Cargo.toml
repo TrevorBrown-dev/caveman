@@ -3,6 +3,8 @@ name = "caveman-launcher"
 description = "Caveman.exe: builds the decks in Caveman Decks and the wheels in Caveman Wheels, then starts ReSkate's launcher"
 edition.workspace = true
 version.workspace = true
+license.workspace = true
+repository.workspace = true
 
 # Built as caveman-launcher.exe and installed as Caveman.exe beside ReSkateLauncher.exe: on Windows "Caveman.exe" and
 # the CLI's "caveman.exe" would be the same file in the shared target folder.
@@ -12,3 +14,7 @@ path = "src/main.rs"
 
 [dependencies]
 caveman-cli = { path = "../crates/caveman-cli" }
+serde_json = "1"
+
+[lints]
+workspace = true

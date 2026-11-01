@@ -42,6 +42,12 @@ pub const SLOT_ART: &str = "2259d419-387f-b1ba-30fc-c5140100b012";
 pub const SLOT_OSK: &str = "c1b71b8a-395f-e8ce-30fc-c5140100a381";
 pub const SLOT_NY: &str = "830b93ff-7cad-e8ee-30fc-c5140100c668";
 pub const SLOT_RGB: &str = "698a46f9-c8de-d48e-30fc-c5140100a381";
+/// Float parameters of the appearance presets (ParamKey GUIDs, from the preset dump of 2026-10-22,
+/// `tests/preset_params.rs`): the holo iridescence amount (0.25 on the holo host, 1.0 on the Carpet Co and Deathwish
+/// holo decks: the shader scales it by the holo map's red), and the metal mask switch (1.0 on the metal and holo
+/// hosts: without it the mask's metal channel is ignored).
+pub const PARAM_IRIDESCENCE_AMOUNT: &str = "6f007e99-9dc5-d442-2d5c-b62b01007daa";
+pub const PARAM_METAL_MASK: &str = "a2189044-0676-ba57-2d5c-b62b0100a211";
 const DEFAULTS: &str = "characters/skateboard/defaults/deck/common/generic/graphic/deck_gen_graphic_default";
 pub const PREFIX: &str = "characters/customization/reskate/board_bottomart/";
 /// The deck item and thumbnail templates: deck_gen_graphic_00003's.
@@ -52,7 +58,8 @@ const LIGHT_DECKS: usize = 40;
 const SKIP_LIGHT: [&str; 2] = ["00041", "00042"];
 /// The game's all-metal decks (mask B 255 everywhere): their thumbnails give a metal deck's light.
 const METAL_DECKS: [(&str, &str); 4] = [("gen", "00041"), ("gen", "00042"), ("chocolate", "00001"), ("nhs", "00013")];
-const DECK_LEVELS: usize = 12;
+/// The mip levels of a deck texture (512 x 2048, down to 1 x 1).
+pub const DECK_LEVELS: usize = 12;
 const ART_SIZE: (usize, usize) = (512, 2048);
 const MIN_WIDTH: usize = 256;
 const MAX_SIDE: usize = 16384;
@@ -65,6 +72,34 @@ pub const WHEEL_ITEMS: &str = "items/board_wheelcolor/";
 /// `param_region_color_0`: three linear floats and a u32 1 (the wheel colour).
 const REGION_COLOUR: &str = "4b18a9e2-cd35-8c46-59ff-5e880100548c";
 const WHEEL_LEVELS: usize = 10;
+
+// ---- grips (knowledge/cosmetics.md, "Grip colours and patterns"): a grip colour is an appearance preset of the grip
+// material (the game's grey grit textures with a tint, or a printed colour map of its own); a grip pattern is a
+// cutout texture the item names directly (R 255 where the grip is, the wood shows through the rest)
+/// The host grip colour preset: hot pink, with the template grit textures and a tint.
+const GRIP_HOST: &str = "characters/skateboard/unlicensed/deck/common/generic/gripcolor/presets/deck_gen_popsiclegripcolor_00006";
+const GRIP_HOST_ITEM: &str = "items/boardtapecolors0/own_deckgripcolor_gen_popsicle_00006";
+const GRIP_HOST_THUMB: &str = "own_deckgripcolor_gen_popsicle_00006";
+/// The template grit colour map every tinted grip uses (512 x 2048 BC7 sRGB, 12 mips).
+const GRIP_TEMPLATE_C: &str = "characters/skateboard/unlicensed/deck/common/generic/gripcolor/presets/_template/2023/deck_gen_gripcolor_c";
+/// The wood's colour map and mask in the host's bundle (for the thumbnails: the wood through a pattern, the bolt heads).
+const GRIP_WOOD_C: &str = "characters/skateboard/unlicensed/deck/generic/popsicle/2022/deck_gen_popsicle_c";
+const GRIP_WOOD_MSK: &str = "characters/skateboard/unlicensed/deck/generic/popsicle/2022/deck_gen_popsicle_msk";
+/// `param_graphic_tintcolor`: three linear floats and a u32 1.
+pub const GRIP_TINT_KEY: &str = "36e50d59-48af-873f-59ff-5e88010042d4";
+/// Black grip's tint (preset 00001): what a pattern's thumbnail shows the pattern in.
+const GRIP_BLACK: [f32; 3] = [0.0481, 0.0440, 0.0537];
+pub const GRIP_PREFIX: &str = "characters/customization/reskate/board_gripcolor/";
+pub const GRIP_ITEMS: &str = "items/board_gripcolor/";
+/// The host cutout: hearts (its bundle holds the one texture, 512 x 2048 BC1, 12 mips).
+const CUTOUT_HOST: &str = "characters/skateboard/unlicensed/deck/common/generic/griptape/deck_gen_gripcutout_00018/2024/deck_gen_gripcutout_00018_osk";
+const CUTOUT_HOST_ITEM: &str = "items/boardtapetextures/own_deckgripcutout_gen_popsicle_00018";
+const CUTOUT_HOST_THUMB: &str = "own_deckgripcutout_gen_popsicle_00018";
+pub const CUTOUT_PREFIX: &str = "characters/customization/reskate/board_griptape/";
+pub const CUTOUT_ITEMS: &str = "items/board_griptape/";
+/// A cutout texture's G (the grit's smoothness) and B, as the game's.
+const CUTOUT_GB: [u8; 2] = [99, 255];
+const GRIP_LEVELS: usize = 12;
 
 /// A failed build.
 #[derive(Debug)]
@@ -87,7 +122,18 @@ macro_rules! from_error {
         }
     )*};
 }
-from_error!(GameError, ebx::Error, brt::BrtError, cas::CasError, texture::TextureError, crate::image::ImageError, ndb::NdbError, bundle::BundleError, toc::TocError, std::io::Error);
+from_error!(
+    GameError,
+    ebx::Error,
+    brt::BrtError,
+    cas::CasError,
+    texture::TextureError,
+    crate::image::ImageError,
+    ndb::NdbError,
+    bundle::BundleError,
+    toc::TocError,
+    std::io::Error
+);
 
 type Result<T> = std::result::Result<T, BuildError>;
 
@@ -124,12 +170,7 @@ impl Host {
         match self {
             Host::Plain => vec![("art", format!("{s}_c")), ("osk", format!("{DEFAULTS}_osk")), ("ny", format!("{DEFAULTS}_ny"))],
             Host::Metal => vec![("art", format!("{s}_c")), ("osk", format!("{s}_osk")), ("ny", format!("{DEFAULTS}_ny"))],
-            Host::Holo => vec![
-                ("art", format!("{s}_c")),
-                ("osk", format!("{s}_osk")),
-                ("ny", format!("{s}_ny")),
-                ("rgb", format!("{s}_rgb")),
-            ],
+            Host::Holo => vec![("art", format!("{s}_c")), ("osk", format!("{s}_osk")), ("ny", format!("{s}_ny")), ("rgb", format!("{s}_rgb"))],
         }
     }
 
@@ -234,6 +275,62 @@ impl WheelSpec {
     }
 }
 
+/// A grip to build (the game's "grip colour"): the game's grit in a colour (`colour`, sRGB; the tint of the preset),
+/// a picture printed on the grit (`print`, any image, fitted as deck art is; its transparent parts show the grit, in
+/// the colour when one is given), or both. `input` and `notes` as a deck's.
+#[derive(Clone, Debug)]
+pub struct GripSpec {
+    pub display: String,
+    pub key: String,
+    pub colour: Option<[u8; 3]>,
+    pub print: Option<Image>,
+    pub input: Option<u64>,
+    pub notes: Vec<String>,
+}
+
+/// A grip pattern to build (the game's cutout): `mask` is 512 x 2048, one channel, 255 where the grip is and 0 where
+/// it is cut away (the wood shows), laid out as deck art (the top face fills it, the nose at the top).
+#[derive(Clone, Debug)]
+pub struct CutoutSpec {
+    pub display: String,
+    pub key: String,
+    pub mask: Image,
+    pub input: Option<u64>,
+    pub notes: Vec<String>,
+}
+
+/// The size of a grip's textures and of a cutout.
+pub const GRIP_SIZE: (usize, usize) = (512, 2048);
+
+/// A pattern mask from any image: its alpha where it has one that is not all opaque, else its lightness; an image of
+/// the deck's 1:4 shape (within 3 per cent) is fitted whole, any other is repeated at its own size across the
+/// 512 x 2048 (a tile). Returns the one-channel mask and notes.
+pub fn fit_mask(img: &Image) -> (Image, Vec<String>) {
+    let mut notes = Vec::new();
+    let rgba = img.to_rgba();
+    let has_alpha = rgba.data.chunks_exact(4).any(|p| p[3] < 255);
+    let source = if has_alpha {
+        notes.push("the pattern is the picture's transparency (clear parts cut the grip away)".to_string());
+        rgba.channel(3)
+    } else {
+        notes.push("the pattern is the picture's lightness (dark parts cut the grip away)".to_string());
+        rgba.to_l()
+    };
+    let target = GRIP_SIZE.0 as f64 / GRIP_SIZE.1 as f64;
+    let aspect = source.width as f64 / source.height as f64;
+    if (aspect - target).abs() / target <= 0.03 {
+        return (source.resize_lanczos(GRIP_SIZE.0, GRIP_SIZE.1), notes);
+    }
+    notes.push(format!("{} x {} is not the deck's 1:4 shape: repeated as a tile", source.width, source.height));
+    let mut out = Image::new(GRIP_SIZE.0, GRIP_SIZE.1, 1);
+    for y in 0..GRIP_SIZE.1 {
+        for x in 0..GRIP_SIZE.0 {
+            out.pixel_mut(x, y)[0] = source.pixel(x % source.width, y % source.height)[0];
+        }
+    }
+    (out, notes)
+}
+
 /// Build settings. `seed` salts every GUID and resource id (each item's ids come from its key and the mod's name, so
 /// they are the same from build to build); `cache_dir` holds the fitted thumbnail lighting and the item cache
 /// (default `%LOCALAPPDATA%\Caveman\cache`); `item_cache` off builds every item.
@@ -253,6 +350,8 @@ pub struct BuildOptions {
     /// material rows in the global shader database and texture lookup. When any are given the mod also carries a
     /// `globals.toc` patch; empty (every other build), it carries none.
     pub config_res: Vec<(String, Vec<u8>, [u8; 16])>,
+    /// The mod's author in its manifest.json (None: "Caveman").
+    pub author: Option<String>,
 }
 
 impl Default for BuildOptions {
@@ -265,6 +364,7 @@ impl Default for BuildOptions {
             extra_ebx: Vec::new(),
             extra_ops: Vec::new(),
             config_res: Vec::new(),
+            author: None,
         }
     }
 }
@@ -278,7 +378,16 @@ pub fn item_input(parts: &[&[u8]]) -> u64 {
 /// The notes of an item in the item cache (built before from the same inputs), or None: lets a caller skip decoding
 /// and fitting an unchanged item's art. `kind` is "deck" or "wheel".
 #[allow(clippy::too_many_arguments)]
-pub fn cached_notes(game: &Game, opts: &BuildOptions, mods_dir: &Path, mod_name: &str, kind: &str, key: &str, display: &str, input: u64) -> Option<Vec<String>> {
+pub fn cached_notes(
+    game: &Game,
+    opts: &BuildOptions,
+    mods_dir: &Path,
+    mod_name: &str,
+    kind: &str,
+    key: &str,
+    display: &str,
+    input: u64,
+) -> Option<Vec<String>> {
     if !opts.item_cache {
         return None;
     }
@@ -303,6 +412,8 @@ pub struct BuildReport {
     pub mod_dir: PathBuf,
     pub decks: Vec<BuiltItem>,
     pub wheels: Vec<BuiltItem>,
+    pub grips: Vec<BuiltItem>,
+    pub cutouts: Vec<BuiltItem>,
     pub cas_bytes: usize,
     pub toc_bytes: usize,
     pub bundles: usize,
@@ -574,7 +685,16 @@ impl ModPatch {
 
     /// Writes the mod folder (patch.Patch.write): the archive, the patch TOC, layout.toc and initfs from the game,
     /// the build stamp, reskate-build.json, manifest.json, README.md and the icon.
-    fn write(&mut self, mod_dir: &Path, title: &str, description: &str, readme: &str, icon: Option<&Image>, tool_version: &str) -> Result<(usize, usize)> {
+    fn write(
+        &mut self,
+        mod_dir: &Path,
+        title: &str,
+        description: &str,
+        readme: &str,
+        icon: Option<&Image>,
+        tool_version: &str,
+        author: &str,
+    ) -> Result<(usize, usize)> {
         let mut regions = Vec::new();
         let bundles = std::mem::take(&mut self.bundles);
         for mut b in bundles {
@@ -618,8 +738,9 @@ impl ModPatch {
         std::fs::write(
             mod_dir.join("manifest.json"),
             format!(
-                "{{\n    \"name\": {},\n    \"author\": \"Caveman\",\n    \"version_number\": {},\n    \"website_url\": \"\",\n    \"description\": {},\n    \"dependencies\": []\n}}",
+                "{{\n    \"name\": {},\n    \"author\": {},\n    \"version_number\": {},\n    \"website_url\": \"\",\n    \"description\": {},\n    \"dependencies\": []\n}}",
                 json_str(title),
+                json_str(author),
                 json_str(tool_version),
                 json_str(description)
             ),
@@ -679,12 +800,11 @@ fn hex(bytes: &[u8]) -> String {
 /// SHA-256 (FIPS 180-4): the build stamp names the Skate.exe a mod was built for.
 pub fn sha256(data: &[u8]) -> [u8; 32] {
     const K: [u32; 64] = [
-        0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5, 0xd807aa98, 0x12835b01,
-        0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174, 0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc,
-        0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da, 0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7, 0xc6e00bf3, 0xd5a79147,
-        0x06ca6351, 0x14292967, 0x27b70a85, 0x2e1b2138, 0x4d2c6dfc, 0x53380d13, 0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85,
-        0xa2bfe8a1, 0xa81a664b, 0xc24b8b70, 0xc76c51a3, 0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070, 0x19a4c116, 0x1e376c08,
-        0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3, 0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208,
+        0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5, 0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3,
+        0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174, 0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc, 0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da,
+        0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7, 0xc6e00bf3, 0xd5a79147, 0x06ca6351, 0x14292967, 0x27b70a85, 0x2e1b2138, 0x4d2c6dfc, 0x53380d13,
+        0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85, 0xa2bfe8a1, 0xa81a664b, 0xc24b8b70, 0xc76c51a3, 0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070,
+        0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3, 0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208,
         0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2,
     ];
     let mut h: [u32; 8] = [0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19];
@@ -729,7 +849,7 @@ pub fn sha256(data: &[u8]) -> [u8; 32] {
 // ---------------------------------------------------------------- reading the game
 
 /// The decoded EBX `name` of a bundle (newdeck._ebx).
-fn bundle_ebx(game: &Game, b: &game::Bundle, name: &str) -> Result<Vec<u8>> {
+pub(crate) fn bundle_ebx(game: &Game, b: &game::Bundle, name: &str) -> Result<Vec<u8>> {
     let i = b.manifest.ebx_index(name).ok_or_else(|| BuildError(format!("{} has no EBX {name}", b.name)))?;
     Ok(game.decode(&b.files[b.manifest.ebx_file(i)])?)
 }
@@ -799,13 +919,8 @@ pub fn default_layers(game: &Game) -> Result<(Image, Image)> {
 /// Natural Blank's art: what shows through transparent parts of deck art (caveman.WOOD).
 pub fn natural_wood(game: &Game) -> Result<Image> {
     let b = game.bundle(&find_bundle(game, &format!("/{WOOD}_ap_cas_main_bundlereftable"))?, ITEMS_TOC)?;
-    let name = b
-        .manifest
-        .res
-        .iter()
-        .find(|r| r.name.ends_with(&format!("/{WOOD}_c")))
-        .map(|r| r.name.clone())
-        .ok_or_else(|| BuildError(format!("no {WOOD} art")))?;
+    let name =
+        b.manifest.res.iter().find(|r| r.name.ends_with(&format!("/{WOOD}_c"))).map(|r| r.name.clone()).ok_or_else(|| BuildError(format!("no {WOOD} art")))?;
     texture_image(game, &b, &name)
 }
 
@@ -813,6 +928,33 @@ pub fn natural_wood(game: &Game) -> Result<Image> {
 /// clockwise), cover-cropped to 1:4 and centred, resized (Lanczos), flattened onto `wood` where transparent. Returns
 /// the art and notes on what was done.
 pub fn fit_art(img: &Image, wood: &Image) -> Result<(Image, Vec<String>)> {
+    fit_art_on(img, wood, None)
+}
+
+/// What shows through transparent parts of a deck's art: the deck's colour (`Name.ff0000.png`, settings `colour`),
+/// else natural wood. The game's own plain-colour decks are solid-colour art too: deck materials take no colour.
+pub fn deck_backdrop(wood: &Image, paint: Option<[u8; 3]>) -> Image {
+    match paint {
+        Some(c) => Image::filled(ART_SIZE.0, ART_SIZE.1, &c),
+        None => wood.clone(),
+    }
+}
+
+/// `fit_art` over the deck's colour (`deck_backdrop`) where the art is transparent.
+pub fn fit_art_on(img: &Image, wood: &Image, paint: Option<[u8; 3]>) -> Result<(Image, Vec<String>)> {
+    let (img, mut notes) = fit_frame(img)?;
+    if img.data.chunks_exact(4).any(|p| p[3] < 255) {
+        notes.push(match paint {
+            Some(c) => format!("transparent parts show #{:02x}{:02x}{:02x}", c[0], c[1], c[2]),
+            None => "transparent parts show natural wood".to_string(),
+        });
+    }
+    Ok((deck_backdrop(wood, paint).to_rgba().alpha_composite(&img).to_rgb(), notes))
+}
+
+/// Any image in the deck art's frame, its transparency kept: turned upright when drawn sideways, cover-cropped to
+/// 1:4 and centred, resized to 512 x 2048 RGBA (the fit of `fit_art_on` without the backdrop; printed grips use it).
+pub fn fit_frame(img: &Image) -> Result<(Image, Vec<String>)> {
     let mut notes = Vec::new();
     if img.width.max(img.height) > MAX_SIDE {
         return fail(format!("{} x {} is too large (at most {MAX_SIDE} px a side)", img.width, img.height));
@@ -835,11 +977,7 @@ pub fn fit_art(img: &Image, wood: &Image) -> Result<(Image, Vec<String>)> {
     if img.width < MIN_WIDTH {
         notes.push(format!("only {} px wide: it will look soft (1024 x 4096 is ideal)", img.width));
     }
-    let img = img.to_rgba().resize_lanczos(ART_SIZE.0, ART_SIZE.1);
-    if img.data.chunks_exact(4).any(|p| p[3] < 255) {
-        notes.push("transparent parts show natural wood".to_string());
-    }
-    Ok((wood.to_rgba().alpha_composite(&img).to_rgb(), notes))
+    Ok((img.to_rgba().resize_lanczos(ART_SIZE.0, ART_SIZE.1), notes))
 }
 
 // ---------------------------------------------------------------- textures
@@ -903,7 +1041,15 @@ fn add_texture(rec: &mut Recorder, ids: &mut Ids, host: &str, t: &TextureTemplat
 /// [`add_texture`], with the texture at another size and mip count than the template's when `size` is given
 /// (`(width, height, levels)`: an animated deck's atlas in the holo map slot). The header is resized
 /// (texture::resize_header) and the texture asset's CropInfo and authored size follow.
-fn add_texture_sized(rec: &mut Recorder, ids: &mut Ids, host: &str, t: &TextureTemplate, name: &str, pixels: &[u8], size: Option<(usize, usize, usize)>) -> Result<Document> {
+fn add_texture_sized(
+    rec: &mut Recorder,
+    ids: &mut Ids,
+    host: &str,
+    t: &TextureTemplate,
+    name: &str,
+    pixels: &[u8],
+    size: Option<(usize, usize, usize)>,
+) -> Result<Document> {
     let template = match size {
         Some((w, h, levels)) => texture::resize_header(&t.header, &t.res.meta, w, h, levels)?,
         None => t.header.clone(),
@@ -927,11 +1073,8 @@ fn add_texture_sized(rec: &mut Recorder, ids: &mut Ids, host: &str, t: &TextureT
     rec.res(host, name, t.res.rtype, t.res.meta, rid, &header)?;
     let mut record = t.record.clone();
     record.field_mut("h64").ok_or_else(|| BuildError("record without h64".into()))?.payload = texture::owner_hash(name).to_le_bytes().to_vec();
-    record
-        .field_mut("meta")
-        .and_then(|m| m.field_mut("firstMip"))
-        .ok_or_else(|| BuildError("record without meta.firstMip".into()))?
-        .payload = 0i32.to_le_bytes().to_vec();
+    record.field_mut("meta").and_then(|m| m.field_mut("firstMip")).ok_or_else(|| BuildError("record without meta.firstMip".into()))?.payload =
+        0i32.to_le_bytes().to_vec();
     rec.chunk(Some(host), chunk, enc, Some(&record));
     Ok(tex)
 }
@@ -940,9 +1083,7 @@ fn add_texture_sized(rec: &mut Recorder, ids: &mut Ids, host: &str, t: &TextureT
 /// `template` (a BC7 texture of `bundle` in items.toc, same size as `img`), the whole mip chain BC7-encoded, the chunk
 /// Kraken-compressed, the header's mip offsets, first mip 0, chunk GUID and name hash set, a chunk-metadata record
 /// with firstMip 0, a new odd resource id. Its ids come from `mod_name` and `name`, so every build makes the same.
-/// Returns the pieces (for [`BuildOptions::extra_ops`]), the texture's (file, instance) GUIDs, its resource id and
-/// chunk GUID.
-pub fn mod_texture(game: &Game, bundle: &str, template: &str, name: &str, img: &Image, mod_name: &str) -> Result<(Vec<Op>, (Guid, Guid), u64, toc::Guid)> {
+pub fn mod_texture(game: &Game, bundle: &str, template: &str, name: &str, img: &Image, mod_name: &str) -> Result<ModTexture> {
     let b = game.bundle(bundle, ITEMS_TOC)?;
     let records = chunk_records(&b)?;
     let t = texture_template(game, &b, &records, template)?;
@@ -969,7 +1110,16 @@ pub fn mod_texture(game: &Game, bundle: &str, template: &str, name: &str, img: &
             _ => None,
         }))
         .ok_or_else(|| BuildError(format!("{name}: the texture has no resource or chunk")))?;
-    Ok((rec.ops, doc.reference(), rid, chunk))
+    Ok(ModTexture { ops: rec.ops, reference: doc.reference(), rid, chunk })
+}
+
+/// A texture that belongs to no item ([`mod_texture`]): its pieces (for [`BuildOptions::extra_ops`]), its (file,
+/// instance) GUIDs, its resource id and chunk GUID.
+pub struct ModTexture {
+    pub ops: Vec<Op>,
+    pub reference: (Guid, Guid),
+    pub rid: u64,
+    pub chunk: toc::Guid,
 }
 
 /// A template EBX as a new document: new file and instance GUIDs, renamed (newdeck._clone).
@@ -997,9 +1147,9 @@ fn remap_template(remap: &mut HashMap<Guid, Guid>, template: &Document, new: &Do
 // ---------------------------------------------------------------- thumbnail lighting (cached)
 
 fn cache_dir(opts: &BuildOptions, game: &Game) -> PathBuf {
-    opts.cache_dir.clone().unwrap_or_else(|| {
-        std::env::var_os("LOCALAPPDATA").map(PathBuf::from).unwrap_or_else(|| game.root().to_path_buf()).join("Caveman").join("cache")
-    })
+    opts.cache_dir
+        .clone()
+        .unwrap_or_else(|| std::env::var_os("LOCALAPPDATA").map(PathBuf::from).unwrap_or_else(|| game.root().to_path_buf()).join("Caveman").join("cache"))
 }
 
 /// (size, mtime) of Skate.exe: the cache key (the fit only changes with the game).
@@ -1198,7 +1348,7 @@ fn wheel_lighting(game: &Game, opts: &BuildOptions, log: &mut dyn FnMut(&str)) -
 // ---------------------------------------------------------------- appearance preset parameters
 
 /// The index into `doc.boxed_values` of each parameter's boxed value, by ParamKey GUID text (newwheel._param_records).
-fn param_records(doc: &Document) -> HashMap<String, usize> {
+pub(crate) fn param_records(doc: &Document) -> HashMap<String, usize> {
     let by_offset: HashMap<usize, usize> = doc.boxed_values.iter().enumerate().map(|(i, r)| (r.offset, i)).collect();
     let mut out = HashMap::new();
     let Ok(root) = doc.object(0) else { return out };
@@ -1234,6 +1384,51 @@ fn set_region_colour(doc: &mut Document, linear: [f64; 3]) -> Result<()> {
     }
     for (k, v) in linear.iter().enumerate() {
         raw[k * 4..k * 4 + 4].copy_from_slice(&(*v as f32).to_le_bytes());
+    }
+    Ok(())
+}
+
+/// The boxed parameters of a host deck's appearance preset: (ParamKey GUID, the value's raw bytes), for finding a
+/// parameter's key (a float is 4 bytes, a colour 12 or 16; the texture slots are references, not boxed here).
+pub fn preset_params(game: &Game, host: Host) -> Result<Vec<(String, Vec<u8>)>> {
+    let h = load_host(game, host)?;
+    let doc = ebx::read_document(&h.ap)?;
+    let mut out: Vec<(String, Vec<u8>)> = param_records(&doc).into_iter().map(|(k, i)| (k, doc.boxed_values[i].raw_bytes.clone())).collect();
+    out.sort();
+    Ok(out)
+}
+
+/// The same for any deck's appearance preset: `stock` is the deck's path as [`Host::stock`] gives a host's (its
+/// bundle is `win32/<stock>_ap_cas_main_bundlereftable`, its preset `<stock>_ap`).
+pub fn preset_params_of(game: &Game, stock: &str) -> Result<Vec<(String, Vec<u8>)>> {
+    let b = game.bundle(&format!("win32/{stock}_ap_cas_main_bundlereftable"), ITEMS_TOC)?;
+    let doc = ebx::read_document(&bundle_ebx(game, &b, &format!("{stock}_ap"))?)?;
+    let mut out: Vec<(String, Vec<u8>)> = param_records(&doc).into_iter().map(|(k, i)| (k, doc.boxed_values[i].raw_bytes.clone())).collect();
+    out.sort();
+    Ok(out)
+}
+
+/// Sets a boxed float parameter of an appearance preset by its ParamKey GUID (Err when the preset has no such
+/// parameter: a preset only carries the parameters its host's does).
+pub fn set_float_param(doc: &mut Document, key: &str, value: f32) -> Result<()> {
+    let i = *param_records(doc).get(key).ok_or_else(|| BuildError(format!("the preset has no parameter {key}")))?;
+    let raw = &mut doc.boxed_values[i].raw_bytes;
+    if raw.len() < 4 {
+        return fail(format!("parameter {key} is too short for a float"));
+    }
+    raw[..4].copy_from_slice(&value.to_le_bytes());
+    Ok(())
+}
+
+/// Sets a 16-byte colour parameter (three linear floats; the fourth word, a 1, is kept), such as a grip's tint.
+pub fn set_vec3_param(doc: &mut Document, key: &str, value: [f32; 3]) -> Result<()> {
+    let i = *param_records(doc).get(key).ok_or_else(|| BuildError(format!("the preset has no parameter {key}")))?;
+    let raw = &mut doc.boxed_values[i].raw_bytes;
+    if raw.len() < 12 {
+        return fail(format!("parameter {key} is too short for a colour"));
+    }
+    for (k, v) in value.iter().enumerate() {
+        raw[k * 4..k * 4 + 4].copy_from_slice(&v.to_le_bytes());
     }
     Ok(())
 }
@@ -1299,6 +1494,11 @@ fn add_thumbnails(rec: &mut Recorder, ids: &mut Ids, t: &ItemTemplates, base: &s
 /// A new item cloned from `t.item`: Key, HashedAssetKey, its CDN records, AssetName. Returns it and the index of its
 /// DelMarCustomizationItemData.
 fn new_item(t: &ItemTemplates, ids: &mut Ids, item_name: &str, key: &str, base: &str, cdn_refs: [(Guid, Guid); 2]) -> Result<(Document, usize)> {
+    new_item_for(t, ids, item_name, key, &format!("{base}_ap"), cdn_refs)
+}
+
+/// `new_item` with the asset the item names given whole (`<base>_ap` for a preset, `<base>_osk` for a cutout texture).
+fn new_item_for(t: &ItemTemplates, ids: &mut Ids, item_name: &str, key: &str, asset: &str, cdn_refs: [(Guid, Guid); 2]) -> Result<(Document, usize)> {
     let mut item = clone_doc(&t.item, item_name, ids)?;
     item.set("Key", key, 0)?;
     item.set("HashedAssetKey", Data::UInt(djb32(key) as u64), 0)?;
@@ -1309,7 +1509,7 @@ fn new_item(t: &ItemTemplates, ids: &mut Ids, item_name: &str, key: &str, base: 
     }
     item.remap_imports(&mapping);
     let di = *item.instances_of("DelMarCustomizationItemData").first().ok_or_else(|| BuildError("no DelMarCustomizationItemData".into()))?;
-    item.set("AssetPaths[0].AssetName", format!("{base}_ap"), di)?;
+    item.set("AssetPaths[0].AssetName", asset.to_string(), di)?;
     Ok((item, di))
 }
 
@@ -1346,7 +1546,12 @@ struct DeckCtx {
 }
 
 fn deck_ctx(game: &Game, shared: &game::Bundle, opts: &BuildOptions, log: &mut dyn FnMut(&str)) -> Result<DeckCtx> {
-    let t = ItemTemplates::load(game, shared, &format!("items/cust_board/own_deck_gen_popsiclegraphic_{HOST_NUM}"), &format!("own_deckgraphic_gen_popsicle_{HOST_NUM}"))?;
+    let t = ItemTemplates::load(
+        game,
+        shared,
+        &format!("items/cust_board/own_deck_gen_popsiclegraphic_{HOST_NUM}"),
+        &format!("own_deckgraphic_gen_popsicle_{HOST_NUM}"),
+    )?;
     let lighting = deck_lighting(game, opts, log)?;
     let mut hosts = HashMap::new();
     for host in [Host::Plain, Host::Metal, Host::Holo] {
@@ -1419,7 +1624,14 @@ fn deck_product(ctx: &DeckCtx, root: &Path, spec: &DeckSpec, ids: &mut Ids) -> R
     // the art, and the deck's own mask, normal map and holo map when it has them
     let art = art.to_rgb();
     let mut remap = HashMap::new();
-    let tex = add_texture(&mut rec, ids, &host_name, &h.textures["art"], &format!("{PREFIX}{base}_role3_{SLOT_ART}"), &mip_chain(&art, DECK_LEVELS, false, bc7::encode))?;
+    let tex = add_texture(
+        &mut rec,
+        ids,
+        &host_name,
+        &h.textures["art"],
+        &format!("{PREFIX}{base}_role3_{SLOT_ART}"),
+        &mip_chain(&art, DECK_LEVELS, false, bc7::encode),
+    )?;
     remap_template(&mut remap, &h.textures["art"].doc, &tex);
     for (slot, img) in [("osk", &layers.osk), ("ny", &layers.ny), ("rgb", &layers.rgb)] {
         let Some(img) = img else { continue };
@@ -1448,6 +1660,9 @@ fn deck_product(ctx: &DeckCtx, root: &Path, spec: &DeckSpec, ids: &mut Ids) -> R
     // the appearance preset: the host's, its slots pointed at the new textures
     let mut ap = clone_doc(&h.ap, &ap_name, ids)?;
     ap.remap_imports(&remap);
+    for (key, value) in &layers.preset_floats {
+        set_float_param(&mut ap, key, *value)?;
+    }
     rec.ebx(&host_name, &ap_name, &write(&ap)?)?;
     // thumbnails: rendered on the board (metal decks with the metal light)
     let metal_mask = layers.osk.as_ref().map(|m| m.channel(2));
@@ -1573,8 +1788,22 @@ fn wheel_product(ctx: &WheelCtx, root: &Path, spec: &WheelSpec, ids: &mut Ids) -
     let (art, mask) = wheel_textures(face, spec.colour, &ctx.host_mask);
     let mut rec = Recorder::new(root);
     let host_name = &ctx.host_name;
-    let tex_art = add_texture(&mut rec, ids, host_name, &ctx.art_t, &format!("{WHEEL_PREFIX}{base}_role3_{SLOT_ART}"), &mip_chain(&art, WHEEL_LEVELS, false, bc7::encode))?;
-    let tex_osk = add_texture(&mut rec, ids, host_name, &ctx.osk_t, &format!("{WHEEL_PREFIX}{base}_role3_{SLOT_OSK}"), &mip_chain(&mask, WHEEL_LEVELS, false, bc1::encode))?;
+    let tex_art = add_texture(
+        &mut rec,
+        ids,
+        host_name,
+        &ctx.art_t,
+        &format!("{WHEEL_PREFIX}{base}_role3_{SLOT_ART}"),
+        &mip_chain(&art, WHEEL_LEVELS, false, bc7::encode),
+    )?;
+    let tex_osk = add_texture(
+        &mut rec,
+        ids,
+        host_name,
+        &ctx.osk_t,
+        &format!("{WHEEL_PREFIX}{base}_role3_{SLOT_OSK}"),
+        &mip_chain(&mask, WHEEL_LEVELS, false, bc1::encode),
+    )?;
     let mut remap = HashMap::new();
     remap_template(&mut remap, &ctx.art_t.doc, &tex_art);
     remap_template(&mut remap, &ctx.osk_t.doc, &tex_osk);
@@ -1602,6 +1831,177 @@ fn wheel_product(ctx: &WheelCtx, root: &Path, spec: &WheelSpec, ids: &mut Ids) -
     })
 }
 
+/// What a thumbnail of the deck's top needs (thumbs::render_top): the wood's colour map and mask (the top face in
+/// their left half, the bolt heads where the mask's B is set) and the host item's thumbnails, whose alpha is the
+/// deck's shape from above at 256 and 768 px.
+struct TopView {
+    wood: Image,
+    wood_mask: Image,
+    shapes: [Image; 2],
+}
+
+fn top_view(game: &Game, shared: &game::Bundle, grip_bundle: &game::Bundle, thumb: &str) -> Result<TopView> {
+    Ok(TopView {
+        wood: texture_image(game, grip_bundle, GRIP_WOOD_C)?,
+        wood_mask: texture_image(game, grip_bundle, GRIP_WOOD_MSK)?,
+        shapes: [texture_image(game, shared, &format!("thumbnail/tool/{thumb}"))?, texture_image(game, shared, &format!("thumbnail/tool/{thumb}_lrg"))?],
+    })
+}
+
+/// What building grips needs from the game, loaded once per build: the host grip colour's item and thumbnail
+/// templates, its preset and bundle, the template grit's colour map (the texture a printed grip replaces, and the
+/// image a print is laid over) and what the thumbnails need.
+struct GripCtx {
+    t: ItemTemplates,
+    host_name: String,
+    ap_t: Vec<u8>,
+    c_t: TextureTemplate,
+    grit: Image,
+    top: TopView,
+}
+
+fn grip_ctx(game: &Game, shared: &game::Bundle) -> Result<GripCtx> {
+    let t = ItemTemplates::load(game, shared, GRIP_HOST_ITEM, GRIP_HOST_THUMB)?;
+    let host_name = format!("win32/{GRIP_HOST}_ap_cas_main_bundlereftable");
+    let hb = game.bundle(&host_name, ITEMS_TOC)?;
+    let records = chunk_records(&hb)?;
+    Ok(GripCtx {
+        t,
+        ap_t: bundle_ebx(game, &hb, &format!("{GRIP_HOST}_ap"))?,
+        c_t: texture_template(game, &hb, &records, GRIP_TEMPLATE_C)?,
+        grit: texture_image(game, &hb, GRIP_TEMPLATE_C)?,
+        top: top_view(game, shared, &hb, GRIP_HOST_THUMB)?,
+        host_name,
+    })
+}
+
+/// What building grip patterns needs: the host cutout's item and thumbnail templates, its bundle and texture (the
+/// template of a new cutout), the grit (black, for the thumbnails) and what the thumbnails need.
+struct CutoutCtx {
+    t: ItemTemplates,
+    host_name: String,
+    osk_t: TextureTemplate,
+    grit: Image,
+    top: TopView,
+}
+
+fn cutout_ctx(game: &Game, shared: &game::Bundle) -> Result<CutoutCtx> {
+    let t = ItemTemplates::load(game, shared, CUTOUT_HOST_ITEM, CUTOUT_HOST_THUMB)?;
+    let host_name = format!("win32/{CUTOUT_HOST}_cas_main_bundlereftable");
+    let hb = game.bundle(&host_name, ITEMS_TOC)?;
+    let records = chunk_records(&hb)?;
+    let grip_bundle = game.bundle(&format!("win32/{GRIP_HOST}_ap_cas_main_bundlereftable"), ITEMS_TOC)?;
+    Ok(CutoutCtx {
+        t,
+        osk_t: texture_template(game, &hb, &records, CUTOUT_HOST)?,
+        grit: texture_image(game, &grip_bundle, GRIP_TEMPLATE_C)?,
+        top: top_view(game, shared, &grip_bundle, CUTOUT_HOST_THUMB)?,
+        host_name,
+    })
+}
+
+/// The grit in a colour, as the game's tint shows it (boardmodel::coloured, which matches the menu). `colour` sRGB.
+fn tinted_grit(grit: &Image, colour: [u8; 3]) -> Image {
+    crate::boardmodel::coloured(grit, colour.map(|v| thumbs::srgb_to_linear(v as f64) as f32)).to_rgb()
+}
+
+/// Everything one grip adds to the mod, recorded: a plain colour is the host preset with the tint set (the template
+/// textures stay, shared with the game's own grips); a print gets a colour map of its own (the picture over the
+/// grit, in the colour when one is given) and a white tint.
+fn grip_product(ctx: &GripCtx, root: &Path, spec: &GripSpec, ids: &mut Ids) -> Result<Product> {
+    let base = base_name(&spec.key);
+    let ap_name = format!("{GRIP_PREFIX}{base}_ap");
+    let item_name = format!("{GRIP_ITEMS}own_{base}");
+    let mut rec = Recorder::new(root);
+    let mut remap = HashMap::new();
+    let mut notes = spec.notes.clone();
+    let under = match spec.colour {
+        Some(c) => tinted_grit(&ctx.grit, c),
+        None => ctx.grit.to_rgb(),
+    };
+    let top = match &spec.print {
+        Some(print) => {
+            let (fitted, fit_notes) = fit_frame(print)?;
+            notes.extend(fit_notes);
+            let c = under.to_rgba().alpha_composite(&fitted).to_rgb();
+            let tex = add_texture(
+                &mut rec,
+                ids,
+                &ctx.host_name,
+                &ctx.c_t,
+                &format!("{GRIP_PREFIX}{base}_role3_{SLOT_ART}"),
+                &mip_chain(&c, GRIP_LEVELS, false, bc7::encode),
+            )?;
+            remap_template(&mut remap, &ctx.c_t.doc, &tex);
+            c
+        }
+        None => under,
+    };
+    let mut ap = clone_doc(&ctx.ap_t, &ap_name, ids)?;
+    ap.remap_imports(&remap);
+    let tint = match (&spec.print, spec.colour) {
+        (None, Some(c)) => c.map(|v| thumbs::srgb_to_linear(v as f64) as f32),
+        _ => [1.0, 1.0, 1.0],
+    };
+    set_vec3_param(&mut ap, GRIP_TINT_KEY, tint)?;
+    rec.ebx(&ctx.host_name, &ap_name, &write(&ap)?)?;
+    let small = thumbs::render_top(&top, None, &ctx.top.wood, &ctx.top.wood_mask, &ctx.top.shapes[0]);
+    let large = thumbs::render_top(&top, None, &ctx.top.wood, &ctx.top.wood_mask, &ctx.top.shapes[1]);
+    let cdn_refs = add_thumbnails(&mut rec, ids, &ctx.t, &base, [&small, &large])?;
+    let (mut item, di) = new_item_for(&ctx.t, ids, &item_name, &spec.key, &format!("{base}_ap"), cdn_refs)?;
+    item.set("CustomizationItemId", "", di)?;
+    if let Some(c) = spec.colour {
+        for (axis, v) in ["x", "y", "z"].iter().zip(c) {
+            item.set(&format!("BaseColor.{axis}"), Data::F64(thumbs::srgb_to_linear(v as f64)), di)?;
+        }
+    }
+    rec.ebx(SHARED, &item_name, &write(&item)?)?;
+    Ok(Product {
+        display: spec.display.clone(),
+        base,
+        notes,
+        ops: rec.ops,
+        preset: (ap_name.to_lowercase(), ctx.host_name.clone()),
+        item_ref: item.reference(),
+        thumbnail: large,
+        icon: None,
+    })
+}
+
+/// Everything one grip pattern adds to the mod, recorded: a cutout texture (R the mask, G and B as the game's) in the
+/// host cutout's bundle, named by the item as the game names its own, and thumbnails of black grip with the wood
+/// through the holes.
+fn cutout_product(ctx: &CutoutCtx, root: &Path, spec: &CutoutSpec, ids: &mut Ids) -> Result<Product> {
+    if (spec.mask.width, spec.mask.height) != GRIP_SIZE {
+        return fail(format!("{}: the mask is {} x {}, not {} x {}", spec.display, spec.mask.width, spec.mask.height, GRIP_SIZE.0, GRIP_SIZE.1));
+    }
+    let base = base_name(&spec.key);
+    let tex_name = format!("{CUTOUT_PREFIX}{base}_osk");
+    let item_name = format!("{CUTOUT_ITEMS}own_{base}");
+    let mut rec = Recorder::new(root);
+    let mut osk = Image::new(GRIP_SIZE.0, GRIP_SIZE.1, 3);
+    for (dst, src) in osk.data.chunks_exact_mut(3).zip(spec.mask.data.chunks_exact(spec.mask.channels)) {
+        dst.copy_from_slice(&[src[0], CUTOUT_GB[0], CUTOUT_GB[1]]);
+    }
+    add_texture(&mut rec, ids, &ctx.host_name, &ctx.osk_t, &tex_name, &mip_chain(&osk, GRIP_LEVELS, false, bc1::encode))?;
+    let black = crate::boardmodel::coloured(&ctx.grit, GRIP_BLACK).to_rgb();
+    let small = thumbs::render_top(&black, Some(&spec.mask), &ctx.top.wood, &ctx.top.wood_mask, &ctx.top.shapes[0]);
+    let large = thumbs::render_top(&black, Some(&spec.mask), &ctx.top.wood, &ctx.top.wood_mask, &ctx.top.shapes[1]);
+    let cdn_refs = add_thumbnails(&mut rec, ids, &ctx.t, &base, [&small, &large])?;
+    let (item, _) = new_item_for(&ctx.t, ids, &item_name, &spec.key, &format!("{base}_osk"), cdn_refs)?;
+    rec.ebx(SHARED, &item_name, &write(&item)?)?;
+    Ok(Product {
+        display: spec.display.clone(),
+        base,
+        notes: spec.notes.clone(),
+        ops: rec.ops,
+        preset: (tex_name.to_lowercase(), ctx.host_name.clone()),
+        item_ref: item.reference(),
+        thumbnail: large,
+        icon: None,
+    })
+}
+
 /// The resource ids and chunk GUIDs already in use: the game's, in the bundles a build patches and items.toc's
 /// chunks, then every item the build has placed. A new item's ids must not clash with any of them.
 struct Taken {
@@ -1610,7 +2010,7 @@ struct Taken {
 }
 
 impl Taken {
-    fn new(game: &Game, shared: &game::Bundle, decks: bool, wheels: bool) -> Result<Taken> {
+    fn new(game: &Game, shared: &game::Bundle, decks: bool, wheels: bool, grips: bool, cutouts: bool) -> Result<Taken> {
         let mut t = Taken { rids: Default::default(), chunks: Default::default() };
         for c in &game.toc(ITEMS_TOC)?.toc.chunks {
             t.chunks.insert(c.guid.le_bytes());
@@ -1627,6 +2027,12 @@ impl Taken {
         if wheels {
             hosts.push(format!("win32/{WHEEL_HOST}_ap_cas_main_bundlereftable"));
         }
+        if grips {
+            hosts.push(format!("win32/{GRIP_HOST}_ap_cas_main_bundlereftable"));
+        }
+        if cutouts {
+            hosts.push(format!("win32/{CUTOUT_HOST}_cas_main_bundlereftable"));
+        }
         for h in hosts {
             add(&game.bundle(&h, ITEMS_TOC)?.manifest);
         }
@@ -1636,7 +2042,8 @@ impl Taken {
     fn clashes(&self, p: &Product) -> bool {
         let mut rids = std::collections::HashSet::new();
         let mut chunks = std::collections::HashSet::new();
-        p.rids().any(|r| self.rids.contains(&r) || !rids.insert(r)) || p.chunk_guids().any(|g| self.chunks.contains(&g.le_bytes()) || !chunks.insert(g.le_bytes()))
+        p.rids().any(|r| self.rids.contains(&r) || !rids.insert(r))
+            || p.chunk_guids().any(|g| self.chunks.contains(&g.le_bytes()) || !chunks.insert(g.le_bytes()))
     }
 
     fn add(&mut self, p: &Product) {
@@ -1713,6 +2120,30 @@ const BATCH: usize = 64;
 
 /// The items of one kind, each from the item cache (salt 0) when it is there, the rest built in parallel. Entries
 /// written for new items; notes on cache writes that failed go to `notes`.
+impl ItemSpec for GripSpec {
+    fn key(&self) -> &str {
+        &self.key
+    }
+    fn display(&self) -> &str {
+        &self.display
+    }
+    fn input(&self) -> Option<u64> {
+        self.input
+    }
+}
+
+impl ItemSpec for CutoutSpec {
+    fn key(&self) -> &str {
+        &self.key
+    }
+    fn display(&self) -> &str {
+        &self.display
+    }
+    fn input(&self) -> Option<u64> {
+        self.input
+    }
+}
+
 fn products<S: ItemSpec, C: Sync>(
     specs: &[S],
     cache: &ItemCache,
@@ -1756,18 +2187,31 @@ fn products<S: ItemSpec, C: Sync>(
 /// from the same inputs (and the same engine and game), and kept there for the next build; only new or changed items
 /// are encoded (in parallel). The mod is then assembled from the items in order, so it is byte-identical to a clean
 /// build of the same inputs.
-pub fn build(game: Arc<Game>, decks: &[DeckSpec], wheels: &[WheelSpec], mods_dir: &Path, mod_name: &str, opts: &BuildOptions, log: &mut dyn FnMut(&str)) -> Result<BuildReport> {
+#[allow(clippy::too_many_arguments)]
+pub fn build(
+    game: Arc<Game>,
+    decks: &[DeckSpec],
+    wheels: &[WheelSpec],
+    grips: &[GripSpec],
+    cutouts: &[CutoutSpec],
+    mods_dir: &Path,
+    mod_name: &str,
+    opts: &BuildOptions,
+    log: &mut dyn FnMut(&str),
+) -> Result<BuildReport> {
     let root = game.root().to_path_buf();
     let seed = opts.seed.unwrap_or(0);
     let game_id = exe_key(&game)?;
     let cache = ItemCache::open(opts.item_cache.then(|| cache_dir(opts, &game)).as_deref(), mods_dir, mod_name);
     let shared = game.bundle(SHARED, ITEMS_TOC)?;
-    let mut taken = Taken::new(&game, &shared, !decks.is_empty(), !wheels.is_empty())?;
+    let mut taken = Taken::new(&game, &shared, !decks.is_empty(), !wheels.is_empty(), !grips.is_empty(), !cutouts.is_empty())?;
     let mut p = ModPatch::new(game.clone());
     let mut master = ebx::read_document(&bundle_ebx(&game, &shared, MASTER)?)?;
     let mut presets: Vec<(String, String)> = Vec::new();
     let mut built_decks = Vec::new();
     let mut built_wheels = Vec::new();
+    let mut built_grips = Vec::new();
+    let mut built_cutouts = Vec::new();
     let mut icon: Option<Image> = None;
     let mut notes: Vec<String> = Vec::new();
     let (mut reused, mut encoded) = (0usize, 0usize);
@@ -1885,11 +2329,90 @@ pub fn build(game: Arc<Game>, decks: &[DeckSpec], wheels: &[WheelSpec], mods_dir
             }
         }
     }
+    if !grips.is_empty() {
+        let mut ctx: Option<GripCtx> = None;
+        let entry = |key: &str, display: &str, input: u64, salt: u32| ItemCache::entry("grip", mod_name, key, display, input, salt, seed, game_id);
+        let make = |c: &GripCtx, s: &GripSpec, salt: u32| grip_product(c, &root, s, &mut Ids::for_item(mod_name, "grip", &s.key, salt, seed));
+        for batch in grips.chunks(BATCH) {
+            let (found, hits) = {
+                let mut load = || grip_ctx(&game, &shared);
+                products(batch, &cache, &entry, &mut ctx, &mut load, &make, &mut notes)?
+            };
+            reused += hits;
+            encoded += batch.len() - hits;
+            for (spec, product) in batch.iter().zip(found) {
+                let product = product.unwrap();
+                if ctx.is_none() && taken.clashes(&product) {
+                    ctx = Some(grip_ctx(&game, &shared)?);
+                }
+                let rebuild = |salt: u32| -> Result<Product> {
+                    if let Some(cached) = spec.input.filter(|_| cache.enabled()).and_then(|i| cache.load(&entry(&spec.key, &spec.display, i, salt))) {
+                        return Ok(cached);
+                    }
+                    let c = match &ctx {
+                        Some(c) => c,
+                        None => return fail("internal: the grip templates were not loaded"),
+                    };
+                    let made = make(c, spec, salt)?;
+                    if let Some(i) = spec.input.filter(|_| cache.enabled()) {
+                        let _ = cache.store(&entry(&spec.key, &spec.display, i, salt), &made);
+                    }
+                    Ok(made)
+                };
+                let (item, _) = place(product, rebuild, &spec.display, true, &mut taken, &mut p, &mut master, &mut presets, log)?;
+                if icon.is_none() {
+                    icon = item.thumbnail.as_ref().map(|t| t.resize_lanczos(256, 256));
+                }
+                built_grips.push(item);
+                log(&format!("  built {} ({})", spec.display, spec.key));
+            }
+        }
+    }
+
+    if !cutouts.is_empty() {
+        let mut ctx: Option<CutoutCtx> = None;
+        let entry = |key: &str, display: &str, input: u64, salt: u32| ItemCache::entry("cutout", mod_name, key, display, input, salt, seed, game_id);
+        let make = |c: &CutoutCtx, s: &CutoutSpec, salt: u32| cutout_product(c, &root, s, &mut Ids::for_item(mod_name, "cutout", &s.key, salt, seed));
+        for batch in cutouts.chunks(BATCH) {
+            let (found, hits) = {
+                let mut load = || cutout_ctx(&game, &shared);
+                products(batch, &cache, &entry, &mut ctx, &mut load, &make, &mut notes)?
+            };
+            reused += hits;
+            encoded += batch.len() - hits;
+            for (spec, product) in batch.iter().zip(found) {
+                let product = product.unwrap();
+                if ctx.is_none() && taken.clashes(&product) {
+                    ctx = Some(cutout_ctx(&game, &shared)?);
+                }
+                let rebuild = |salt: u32| -> Result<Product> {
+                    if let Some(cached) = spec.input.filter(|_| cache.enabled()).and_then(|i| cache.load(&entry(&spec.key, &spec.display, i, salt))) {
+                        return Ok(cached);
+                    }
+                    let c = match &ctx {
+                        Some(c) => c,
+                        None => return fail("internal: the cutout templates were not loaded"),
+                    };
+                    let made = make(c, spec, salt)?;
+                    if let Some(i) = spec.input.filter(|_| cache.enabled()) {
+                        let _ = cache.store(&entry(&spec.key, &spec.display, i, salt), &made);
+                    }
+                    Ok(made)
+                };
+                let (item, _) = place(product, rebuild, &spec.display, true, &mut taken, &mut p, &mut master, &mut presets, log)?;
+                if icon.is_none() {
+                    icon = item.thumbnail.as_ref().map(|t| t.resize_lanczos(256, 256));
+                }
+                built_cutouts.push(item);
+                log(&format!("  built {} ({})", spec.display, spec.key));
+            }
+        }
+    }
     for n in &notes {
         log(n);
     }
     if cache.enabled() && reused > 0 {
-        log(&format!("  {reused} of {} item(s) reused from the item cache", decks.len() + wheels.len()));
+        log(&format!("  {reused} of {} item(s) reused from the item cache", decks.len() + wheels.len() + grips.len() + cutouts.len()));
     }
 
     for (bundle, name, data) in &opts.extra_ebx {
@@ -1910,28 +2433,49 @@ pub fn build(game: Arc<Game>, decks: &[DeckSpec], wheels: &[WheelSpec], mods_dir
         p.patch_config(&opts.config_res)?;
     }
 
-    let names: Vec<&str> = built_decks.iter().chain(&built_wheels).map(|b| b.display.as_str()).collect();
-    let (what, description) = match (built_decks.is_empty(), built_wheels.is_empty()) {
-        (false, true) => ("Decks", format!("Decks built by Caveman from PNGs: {}.", names.join(", "))),
-        (true, false) => ("Wheels", format!("Wheels built by Caveman from PNGs: {}.", names.join(", "))),
-        _ => ("Decks and wheels", format!("Decks and wheels built by Caveman from PNGs: {}.", names.join(", "))),
+    let names: Vec<&str> = built_decks.iter().chain(&built_wheels).chain(&built_grips).chain(&built_cutouts).map(|b| b.display.as_str()).collect();
+    let kinds: Vec<&str> = [(&built_decks, "decks"), (&built_wheels, "wheels"), (&built_grips, "grips"), (&built_cutouts, "grip patterns")]
+        .iter()
+        .filter(|(b, _)| !b.is_empty())
+        .map(|(_, k)| *k)
+        .collect();
+    let what = match kinds.len() {
+        0 => "Nothing".to_string(),
+        1 => kinds[0].to_string(),
+        n => format!("{} and {}", kinds[..n - 1].join(", "), kinds[n - 1]),
     };
+    let what = format!("{}{}", what[..1].to_uppercase(), &what[1..]);
+    let description = format!("{what} built by Caveman from PNGs: {}.", names.join(", "));
     let mut readme = format!("# {mod_name}\n\n{what} built by Caveman from PNGs:\n\n");
-    for b in built_decks.iter().chain(&built_wheels) {
+    for b in built_decks.iter().chain(&built_wheels).chain(&built_grips).chain(&built_cutouts) {
         readme.push_str(&format!("- {}\n", b.display));
     }
+    readme.push_str(&format!("\n---\n\nGenerated with Caveman {}.\n", opts.tool_version));
     let mod_dir = mods_dir.join(mod_name);
     let bundles = p.bundles.len();
     let chunks = p.chunks.len();
     let icon = icon.map(|i| i.to_rgba());
-    let (cas_bytes, toc_bytes) = p.write(&mod_dir, mod_name, &description, &readme, icon.as_ref(), &opts.tool_version)?;
+    let (cas_bytes, toc_bytes) =
+        p.write(&mod_dir, mod_name, &description, &readme, icon.as_ref(), &opts.tool_version, opts.author.as_deref().unwrap_or("Caveman"))?;
     if cache.enabled() {
         let removed = cache.prune();
         if removed > 0 {
             log(&format!("  removed {removed} item(s) no longer built from the item cache"));
         }
     }
-    Ok(BuildReport { mod_dir, decks: built_decks, wheels: built_wheels, cas_bytes, toc_bytes, bundles, chunks, reused, encoded })
+    Ok(BuildReport {
+        mod_dir,
+        decks: built_decks,
+        wheels: built_wheels,
+        grips: built_grips,
+        cutouts: built_cutouts,
+        cas_bytes,
+        toc_bytes,
+        bundles,
+        chunks,
+        reused,
+        encoded,
+    })
 }
 
 /// One more entry in the master item list: an import of the item and a pointer to it.
@@ -1978,6 +2522,28 @@ pub fn wheel_textures(face: &Image, colour: [u8; 3], host_mask: &Image) -> (Imag
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn deck_colour_behind_transparent_art() {
+        let wood = Image::filled(ART_SIZE.0, ART_SIZE.1, &[180, 140, 90]);
+        // half transparent, half opaque blue: the transparent half shows the colour, else the wood
+        let mut img = Image::filled(ART_SIZE.0, ART_SIZE.1, &[0, 0, 0, 0]);
+        let half = img.data.len() / 2;
+        for px in img.data[..half].chunks_exact_mut(4) {
+            px.copy_from_slice(&[0, 0, 255, 255]);
+        }
+        let (red, notes) = fit_art_on(&img, &wood, Some([255, 0, 0])).unwrap();
+        assert_eq!(notes, ["transparent parts show #ff0000"]);
+        assert_eq!(&red.data[..3], &[0, 0, 255]);
+        assert_eq!(&red.data[red.data.len() - 3..], &[255, 0, 0]);
+        let (plain, notes) = fit_art_on(&img, &wood, None).unwrap();
+        assert_eq!(notes, ["transparent parts show natural wood"]);
+        assert_eq!(&plain.data[plain.data.len() - 3..], &[180, 140, 90]);
+        assert_eq!(plain.data, fit_art(&img, &wood).unwrap().0.data);
+        // a fully transparent image is a plain deck in the colour, like the game's own plain decks
+        let (solid, _) = fit_art_on(&Image::filled(64, 256, &[0, 0, 0, 0]), &wood, Some([12, 34, 56])).unwrap();
+        assert!(solid.data.chunks_exact(3).all(|p| p == [12, 34, 56]));
+    }
 
     #[test]
     fn sha256_known() {

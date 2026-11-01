@@ -29,6 +29,10 @@ pub struct Settings {
     /// named after it as for suffixes.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
+    /// The deck's colour (`"#rrggbb"`): what shows through transparent parts of the art. Absent: the hex in the
+    /// file's name (`Cool Deck.ff0000.png`), else natural wood.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub colour: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub finish: Option<FinishSettings>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -252,7 +256,7 @@ pub fn is_sidecar(file_name: &str) -> bool {
 
 impl Default for Settings {
     fn default() -> Settings {
-        Settings { version: VERSION, name: None, finish: None, emboss: None, shader: None, board: None, layers: None, animation: None }
+        Settings { version: VERSION, name: None, colour: None, finish: None, emboss: None, shader: None, board: None, layers: None, animation: None }
     }
 }
 
@@ -308,7 +312,10 @@ impl Settings {
             }
             for (slot, file) in l.files() {
                 let p = Path::new(file);
-                if file.trim().is_empty() || p.is_absolute() || p.components().any(|c| matches!(c, std::path::Component::ParentDir | std::path::Component::Prefix(_))) {
+                if file.trim().is_empty()
+                    || p.is_absolute()
+                    || p.components().any(|c| matches!(c, std::path::Component::ParentDir | std::path::Component::Prefix(_)))
+                {
                     return err(format!("layers.{slot} {file:?} (a file name relative to the deck's folder)"));
                 }
             }
@@ -333,9 +340,14 @@ impl Settings {
                 }
             }
             if let Some(s) = a.seconds {
-                if !(s >= 0.5 && s <= 600.0) {
+                if !(0.5..=600.0).contains(&s) {
                     return err(format!("animation.seconds {s} (0.5 to 600)"));
                 }
+            }
+        }
+        if let Some(c) = &self.colour {
+            if parse_colour(c).is_none() {
+                return err(format!("colour {c:?} (use \"#rrggbb\")"));
             }
         }
         if let Some(b) = &self.board {
@@ -425,7 +437,17 @@ impl Settings {
             BoardEffect::Aura(c) => BoardSettings { effect: BoardKind::Aura, colour: c.map(|c| format!("#{:02x}{:02x}{:02x}", c[0], c[1], c[2])), steps: None },
             BoardEffect::Nyan { steps, .. } => BoardSettings { effect: BoardKind::Nyan, colour: None, steps: Some(steps) },
         });
-        Settings { version: VERSION, name: None, finish, emboss: e.emboss.map(|strength| EmbossSettings { strength }), shader, board, layers: None, animation: None }
+        Settings {
+            version: VERSION,
+            name: None,
+            colour: None,
+            finish,
+            emboss: e.emboss.map(|strength| EmbossSettings { strength }),
+            shader,
+            board,
+            layers: None,
+            animation: None,
+        }
     }
 
     /// How an animated deck's clip becomes frames: the `animation` settings over anim's defaults.
@@ -478,6 +500,11 @@ impl Settings {
     /// The aura's colour when the settings name one.
     pub fn colour(&self) -> Option<[u8; 3]> {
         self.board.as_ref().and_then(|b| b.colour.as_deref()).and_then(parse_colour)
+    }
+
+    /// The deck's colour behind transparent art when the settings name one (`colour`).
+    pub fn paint(&self) -> Option<[u8; 3]> {
+        self.colour.as_deref().and_then(parse_colour)
     }
 
     /// The shader marker's speed and glow bytes (shaderpatch.marker_pixels block 2: G turns at 2 G / 255 a second;
@@ -617,7 +644,8 @@ mod tests {
 
     #[test]
     fn layers_schema() {
-        let s = Settings::parse(r#"{"version": 1, "name": "D", "layers": {"osk": ".layers/D.mask.png", "rgb": ".layers/D.holo.png", "foilmode": "frost"}}"#).unwrap();
+        let s = Settings::parse(r#"{"version": 1, "name": "D", "layers": {"osk": ".layers/D.mask.png", "rgb": ".layers/D.holo.png", "foilmode": "frost"}}"#)
+            .unwrap();
         assert!(s.needs_layers());
         assert_eq!(s.layer_paths(Path::new(r"x\D.png")), vec![PathBuf::from(r"x\.layers/D.mask.png"), PathBuf::from(r"x\.layers/D.holo.png")]);
         assert_eq!(Settings::parse(&s.to_json()).unwrap(), s);

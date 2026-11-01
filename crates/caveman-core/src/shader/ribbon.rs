@@ -37,12 +37,10 @@ pub fn patch(ir_text: &str) -> Result<String, String> {
     }
     let store = |ch: u32| stores.iter().find(|s| s.0 == ch).map(|s| s.1.as_str()).unwrap_or_default();
     let inputs = ir::inputs(ir_text);
-    let input = |row: u32, col: u32| {
-        inputs.iter().find(|(k, _)| *k == (row, col)).map(|(_, v)| v.as_str()).ok_or_else(|| format!("no input {row}.{col}"))
-    };
+    let input = |row: u32, col: u32| inputs.iter().find(|(k, _)| *k == (row, col)).map(|(_, v)| v.as_str()).ok_or_else(|| format!("no input {row}.{col}"));
     let (u, v) = (input(0, 0)?, input(0, 1)?); // TEXCOORD0.x across the width, .y along
     let (r, g, b, a) = (input(1, 0)?, input(1, 1)?, input(1, 2)?, input(1, 3)?); // TEXCOORD1: colour and alpha
-    // the stock exposure-like scalars the colour is multiplied by: cb4[459].w, cb4[479].w, cb1[4].w
+                                                                                 // the stock exposure-like scalars the colour is multiplied by: cb4[459].w, cb4[479].w, cb1[4].w
     let scal = ir::cbuf_w(ir_text);
     let loads = ir::cbuf_loads(ir_text);
     let scalar = |reg: u32| -> Result<&str, String> {
@@ -60,7 +58,7 @@ pub fn patch(ir_text: &str) -> Result<String, String> {
     c.push(format!("  %ny_nr = fsub float {}, {r}", f32(0.0)));
     c.push(format!("  %ny_s1 = fdiv float {g}, %ny_nr")); // steps (ratio, survives fades)
     c.push(format!("  %ny_br1 = fdiv float {b}, %ny_nr")); // brightness
-    // the ratio trigger: green > 0 and |red - RATIO x green| < RATIO_TOL x green; steps = RATIO_STEPS x blue / green
+                                                           // the ratio trigger: green > 0 and |red - RATIO x green| < RATIO_TOL x green; steps = RATIO_STEPS x blue / green
     c.push(format!("  %ny_gpos = fcmp ogt float {g}, {}", f32(0.0001)));
     c.push(format!("  %ny_rg = fmul float {g}, {}", f32(RATIO)));
     c.push(format!("  %ny_rd = fsub float {r}, %ny_rg"));

@@ -166,15 +166,11 @@ pub struct Toc {
 }
 
 fn be32(d: &[u8], o: usize) -> Result<u32, TocError> {
-    d.get(o..o + 4)
-        .map(|b| u32::from_be_bytes([b[0], b[1], b[2], b[3]]))
-        .ok_or(TocError::Truncated("word"))
+    d.get(o..o + 4).map(|b| u32::from_be_bytes([b[0], b[1], b[2], b[3]])).ok_or(TocError::Truncated("word"))
 }
 
 fn be64(d: &[u8], o: usize) -> Result<u64, TocError> {
-    d.get(o..o + 8)
-        .map(|b| u64::from_be_bytes(b.try_into().expect("8 bytes")))
-        .ok_or(TocError::Truncated("offset"))
+    d.get(o..o + 8).map(|b| u64::from_be_bytes(b.try_into().expect("8 bytes"))).ok_or(TocError::Truncated("offset"))
 }
 
 /// The Huffman name decoder of the game's TOCs (`fb.Huffman`).
@@ -367,8 +363,7 @@ pub fn perfect_hash(keys: &[Vec<u8>]) -> Result<(Vec<i32>, Vec<usize>), TocError
             }
             seed += 1;
         };
-        mapping[(toc_hash(&keys[bucket[0]], FNV_OFFSET) % modulo) as usize] =
-            i32::try_from(seed).map_err(|_| TocError::TooLarge("perfect-hash seed"))?;
+        mapping[(toc_hash(&keys[bucket[0]], FNV_OFFSET) % modulo) as usize] = i32::try_from(seed).map_err(|_| TocError::TooLarge("perfect-hash seed"))?;
         for (j, &member) in bucket.iter().enumerate() {
             order[indices[j]] = Some(member);
             used[indices[j]] = true;
@@ -520,23 +515,13 @@ impl Toc {
     /// The bundles and live chunks of a parsed patch TOC as `write_patch_toc` input (bundles without a region, and
     /// removed chunks, have no writer form and are left out).
     pub fn to_patch_input(&self) -> (Vec<PatchBundle>, Vec<PatchChunk>) {
-        let bundles = self
-            .bundles
-            .iter()
-            .filter_map(|b| b.region.as_ref().map(|r| PatchBundle { name: b.name.clone(), region: r.clone(), load: b.load }))
-            .collect();
+        let bundles =
+            self.bundles.iter().filter_map(|b| b.region.as_ref().map(|r| PatchBundle { name: b.name.clone(), region: r.clone(), load: b.load })).collect();
         let chunks = self
             .chunks
             .iter()
             .filter(|c| !c.removed)
-            .map(|c| PatchChunk {
-                guid: c.guid,
-                patch: c.patch,
-                install: c.install,
-                archive: c.archive,
-                offset: c.offset,
-                size: c.size,
-            })
+            .map(|c| PatchChunk { guid: c.guid, patch: c.patch, install: c.install, archive: c.archive, offset: c.offset, size: c.size })
             .collect();
         (bundles, chunks)
     }
