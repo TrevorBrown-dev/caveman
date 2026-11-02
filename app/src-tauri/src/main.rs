@@ -32,13 +32,16 @@ struct AppState {
 }
 
 /// The picture on the board as the board cam window last asked: the DLL's label, the fitted PNG it resolved to
-/// (once per label), and when the label was last read the slow way.
+/// (once per label), and when the label was last read the slow way; and for a deck other than The Caveman, its key
+/// and the fitted PNG of its art (once per deck).
 #[derive(Default)]
 struct BoardArtCache {
     label: Option<String>,
     path: Option<String>,
     resolved: bool,
     full_at: Option<std::time::Instant>,
+    deck_key: Option<String>,
+    deck_path: Option<String>,
 }
 
 fn config_file(app: &AppHandle) -> Result<PathBuf, String> {
@@ -138,14 +141,28 @@ struct BoardArt {
     path: Option<String>,
     /// Where the label came from ("status", "board status", "cached"), or why there is none.
     how: String,
+    /// What decides the deck's graphic: "dll" (The Caveman is equipped: the DLL's picture, or the OBS link's video,
+    /// is what is on it), "deck" (another of the library's decks is equipped: `path` is its art) or "model" (a game
+    /// deck, or one whose art this app cannot read: the board model's own graphic).
+    source: &'static str,
+    /// The equipped deck's item key, as the profile has it (null when the profile cannot be read).
+    deck: Option<String>,
 }
 
-/// What is on the board in the game, for the board cam window's graphic layer: the DLL's label for the picture it
-/// put there, resolved to the fitted PNG through the library (a deck by file name or display name) or the pictures
-/// the Live panel staged, fitted as the build fits deck art. The window asks every few seconds and at once when the
-/// app says the picture changed (`force`): pulled, never pushed, so a window opened late cannot miss it. The label is
-/// in the light `status` (DLLs from 2026-10-30 on); from an older DLL the full `board status` is read, at most every
-/// 12 s unless forced.
+/// The Caveman's item key: the deck the FX DLL draws on (`board::TEXTURE_NAME` is its texture with the default
+/// prefix), "Own_000_-_The_Caveman".
+fn the_caveman_key() -> String {
+    caveman_core::fxmod::deck_key(&caveman_core::fxmod::cave_display("000 - "))
+}
+
+/// What is on the board in the game, for the board cam window's graphic layer. The equipped deck decides (ReSkate's
+/// profile, as the grip, trucks and wheels): another deck than The Caveman shows its own art (a deck of the library,
+/// fitted as the build fits it) or the model's graphic (a game deck); The Caveman shows what the DLL put on it: its
+/// label for the picture, resolved to the fitted PNG through the library (a deck by file name or display name) or the
+/// pictures the Live panel staged. The window asks every few seconds and at once when the app says the picture
+/// changed (`force`): pulled, never pushed, so a window opened late cannot miss it. The label is in the light
+/// `status` (DLLs from 2026-10-30 on); from an older DLL the full `board status` is read, at most every 12 s unless
+/// forced. A profile that cannot be read counts as The Caveman (the board cam's first use).
 #[tauri::command]
 async fn board_art(app: AppHandle, state: State<'_, AppState>, force: bool) -> Result<BoardArt, String> {
     let config = current(&app, &state)?;
@@ -153,11 +170,30 @@ async fn board_art(app: AppHandle, state: State<'_, AppState>, force: bool) -> R
     let cache_dir = app.path().app_cache_dir().map_err(|e| e.to_string())?;
     let handle = app.clone();
     tauri::async_runtime::spawn_blocking(move || -> Result<BoardArt, String> {
-        let none = |how: String| BoardArt { injected: false, label: None, path: None, how };
+        let state = handle.state::<AppState>();
+        let deck = state.loadout.current().ok().map(|l| l.deck).filter(|d| !d.is_empty());
+        if let Some(key) = deck.as_deref().filter(|k| !k.eq_ignore_ascii_case(&the_caveman_key())) {
+            let known = {
+                let c = state.board_art.lock().map_err(|e| e.to_string())?;
+                (!force && c.deck_key.as_deref() == Some(key)).then(|| c.deck_path.clone())
+            };
+            let path = match known {
+                Some(path) => path,
+                None => {
+                    let path = resolve_deck_art(&state, &config, key, &cache_dir);
+                    let mut c = state.board_art.lock().map_err(|e| e.to_string())?;
+                    c.deck_key = Some(key.to_string());
+                    c.deck_path = path.clone();
+                    path
+                }
+            };
+            let source = if path.is_some() { "deck" } else { "model" };
+            return Ok(BoardArt { injected: false, label: None, path, how: "the equipped deck".into(), source, deck });
+        }
+        let none = |how: String| BoardArt { injected: false, label: None, path: None, how, source: "dll", deck: deck.clone() };
         if !bake::game_running() {
             return Ok(none("the game is not running".into()));
         }
-        let state = handle.state::<AppState>();
         let (label, how) = match live::board_label(&trainer) {
             Err(e) => return Ok(none(e)),
             Ok(Some(label)) => (label, "status"),
@@ -189,10 +225,27 @@ async fn board_art(app: AppHandle, state: State<'_, AppState>, force: bool) -> R
                 path
             }
         };
-        Ok(BoardArt { injected: true, label, path, how: how.into() })
+        Ok(BoardArt { injected: true, label, path, how: how.into(), source: "dll", deck })
     })
     .await
     .map_err(|e| e.to_string())?
+}
+
+/// The fitted PNG of an equipped deck's art, when it is one of the library's decks (by its item key) drawn from a
+/// PNG; None for a game deck (the model has its graphic), an animated deck or one this app cannot fit.
+fn resolve_deck_art(state: &AppState, config: &Config, key: &str, cache_dir: &Path) -> Option<String> {
+    let lib = library::scan(config);
+    let source = lib.decks.iter().find(|d| d.key.eq_ignore_ascii_case(key)).map(|d| PathBuf::from(&d.source))?;
+    if !source.extension().is_some_and(|e| e.eq_ignore_ascii_case("png")) {
+        return None;
+    }
+    match art::fitted(&state.art, &config.game_dir(), &source, &cache_dir.join("art")) {
+        Ok((path, _)) => Some(path.display().to_string()),
+        Err(e) => {
+            eprintln!("board art: {}: {e}", source.display());
+            None
+        }
+    }
 }
 
 /// The fitted PNG for the DLL's label: a deck of the library by file name or display name, else a staged picture.
@@ -263,7 +316,7 @@ async fn board_model(app: AppHandle, state: State<'_, AppState>, force: bool) ->
             let s = |k: &str| v.get(k).and_then(|x| x.as_str()).unwrap_or_default().to_string();
             caveman_core::boardmodel::Loadout { deck: s("deck"), grip: s("grip"), cutout: s("cutout"), trucks: s("trucks"), wheels: s("wheels") }
         });
-    let loadout = match (forced, state.loadout.current()) {
+    let mut loadout = match (forced, state.loadout.current()) {
         (Some(l), _) => l,
         (None, Ok(l)) => l,
         (None, Err(why)) => {
@@ -271,6 +324,13 @@ async fn board_model(app: AppHandle, state: State<'_, AppState>, force: bool) ->
             caveman_core::boardmodel::Loadout::stock()
         }
     };
+    // a deck that is not one of the game's own items (the game's are `Own_DeckGraphic_...` and `Own_Deck_...`; the
+    // library's decks and The Caveman are not) has no graphic in the game's files: the model is the same for all of
+    // them, with the window laying the deck's art on it (`board_art`), so they share one instead of a build each
+    let deck = loadout.deck.to_lowercase();
+    if !(deck.starts_with("own_deckgraphic_") || deck.starts_with("own_deck_")) {
+        loadout.deck.clear();
+    }
     let dir = app.path().app_cache_dir().map_err(|e| e.to_string())?.join("board");
     let out = dir.join(format!("skateboard-{}-{}-{modified}-{}.glb", env!("CARGO_PKG_VERSION"), exe.len(), loadout.key()));
     if !force && out.is_file() {

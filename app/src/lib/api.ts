@@ -135,17 +135,25 @@ export async function studioBoardModel(wheel: string | null, colour: string | nu
 
 /** What is on the board in the game (`board_art`): the DLL's label for the picture and the fitted PNG for it. */
 export interface BoardArt {
-  /** The DLL answered; else the label and the path are nothing. */
+  /** The DLL answered; else the label is nothing. */
   injected: boolean;
   label: string | null;
+  /** The fitted PNG for the deck's graphic, or null (the model's own graphic). */
   path: string | null;
   how: string;
+  /**
+   * What decides the graphic, by the deck the profile has equipped: "dll" (The Caveman: the DLL's picture or the OBS
+   * link's video), "deck" (another deck of the library: `path` is its art) or "model" (a game deck: the model's own).
+   */
+  source: 'dll' | 'deck' | 'model';
+  /** The equipped deck's item key, or null when the profile cannot be read. */
+  deck: string | null;
 }
 
 /** The picture on the board in the game, for the board cam window; `force` reads it afresh however old. */
 export async function boardArt(force = false): Promise<BoardArt> {
   if (inTauri) return invoke<BoardArt>('board_art', { force });
-  return { injected: false, label: null, path: null, how: 'the stand-in' };
+  return { injected: false, label: null, path: null, how: 'the stand-in', source: 'dll', deck: null };
 }
 
 /** A frame of the OBS link's video on the board (`board_frame`): RGBA8 rows, the top row first. */

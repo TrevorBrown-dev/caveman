@@ -4,8 +4,10 @@
   // the board rig, with their textures, built from the install by the back end: `boardModel`), and the pose comes from
   // outside the game (`caveman-trainer pose --bones`, read-only, relayed as `board-pose` events through
   // lib/telemetry.svelte.ts): the board's turn from its entity, and the trucks' steering and the wheels' spin from the
-  // rig's bones. The picture on the board (the DLL's label, resolved by the back end: `boardArt`) and the OBS link's
-  // video frames (the DLL's ring, `boardFrame`) are read by this page itself, never pushed to it. Nothing is drawn in
+  // rig's bones. The deck's graphic follows the deck the profile has equipped, as the other parts do (`boardArt`): a
+  // deck of the library shows its art, a game deck the model's own graphic, and The Caveman what the DLL put on it
+  // (its picture, resolved by the back end, or the OBS link's video frames from the DLL's ring, `boardFrame`). They
+  // are read by this page itself, never pushed to it. Nothing is drawn in
   // the game itself; OBS captures this window ("Caveman board cam") and composes it over the game.
   //
   // Options (lib/widgets.ts): elevation and azimuth of the viewpoint (degrees), zoom, turn (camera: as the game camera
@@ -17,7 +19,7 @@
   import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
   import * as maps from '../../lib/preview/maps';
   import { DECK_LANE, LANES, gritty, lanesOf } from '../../lib/preview/board';
-  import { boardArt, boardFrame, boardModel, imageBitmap, readBytes } from '../../lib/api';
+  import { boardArt, boardFrame, boardModel, imageBitmap, readBytes, type BoardArt } from '../../lib/api';
   import * as live from '../../lib/live';
   import type { PoseFrame } from '../../lib/live';
   import { onFrame, start, stop, telemetry } from '../../lib/telemetry.svelte';
@@ -179,10 +181,12 @@
     let artSeq = 0;
     /** The OBS link's video on the board while its frames come (`boardFrame`); it covers the still. */
     let videoTexture: THREE.DataTexture | null = null;
+    /** What decides the deck's graphic (`boardArt`): the DLL draws only on The Caveman, so its video shows only there. */
+    let deckSource: BoardArt['source'] = 'dll';
     const applyArt = (): void => {
       deckMaterials.forEach((m, i) => {
         const stock = stockDeckMaps[i];
-        const shown = videoTexture ?? artTexture;
+        const shown = (deckSource === 'dll' ? videoTexture : null) ?? artTexture;
         if (shown && stock) {
           // the picture goes exactly where the game's graphic texture goes: its UV set (the second; a new texture
           // would sample the first, the wood's layout, and show the right half of the picture across the deck) and
@@ -340,10 +344,16 @@
       try {
         const a = await boardArt(force);
         if (disposed) return;
-        // the DLL's word while it answers; the options' picture while the game is not running; otherwise (the DLL
-        // not in yet, a status that failed this once) whatever is shown stays
-        if (a.injected) setArt(a.path);
+        const sourceChanged = a.source !== deckSource;
+        deckSource = a.source;
+        // the equipped deck decides: another deck than The Caveman shows its own art (or, a game deck, the model's
+        // graphic: no picture over it); on The Caveman, the DLL's word while it answers, the options' picture while
+        // the game is not running, and otherwise (the DLL not in yet, a status that failed this once) whatever is
+        // shown stays
+        if (a.source !== 'dll') setArt(a.path);
+        else if (a.injected) setArt(a.path);
         else if (a.how === 'the game is not running') setArt(artOption);
+        if (sourceChanged) applyArt();
       } catch {
         // the next check
       } finally {
