@@ -27,3 +27,9 @@ chunks_exact_to_as_chunks = "allow"
 
 [profile.release]
 opt-level = 3
+
+# Dependencies build without debug info in dev builds (tests, clippy, the host tests' DLL): a debugger and a backtrace
+# still show our own crates in full, and the debug cache shrinks to a fraction (dependency debug info was most of its
+# size, together with the old copies `scripts/tidy-target.sh` prunes).
+[profile.dev.package."*"]
+debug = false

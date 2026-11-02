@@ -16,6 +16,8 @@ Thanks for being here. Caveman is one person's project made with a lot of help f
 4. Add a line to `CHANGELOG.md` if a player would notice.
 5. Open the pull request. The template asks what changed, how it was checked, and which ReSkate version you checked it against. Small, focused pull requests get merged; a pull request that does three things gets three rounds of questions.
 
+Cargo never cleans `target/` by itself, and it grows by a full copy with every Rust update and dependency bump. `bash scripts/tidy-target.sh` clears the caches when that happens or when the folder passes 12 GB; run it now and then.
+
 Reviews are kind and specific. Expect questions about the game-facing parts; the history of this project is a list of crashes that each came from one plausible-looking shortcut.
 
 ## Working with agents
