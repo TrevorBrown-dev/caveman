@@ -350,10 +350,11 @@ fn attach_dll(app: AppHandle, state: State<'_, AppState>) -> Result<String, Stri
     live::attach_now(&trainer, &config.game_dir(), config.ring_mb, 60).ok_or_else(|| "the attach helper could not be started".to_string())
 }
 
-/// Switches a deck or wheel off or on for the build (`.caveman-off.json` in its drop folder).
+/// Switches decks or wheels off or on for the build (`.caveman-off.json` in their drop folder): one, a folder's or all
+/// of them. Returns how many changed.
 #[tauri::command(async)]
-fn set_item_off(app: AppHandle, state: State<'_, AppState>, kind: String, source: String, off: bool) -> Result<bool, String> {
-    library::set_off(&current(&app, &state)?, &kind, Path::new(&source), off)
+fn set_items_off(app: AppHandle, state: State<'_, AppState>, kind: String, sources: Vec<String>, off: bool) -> Result<usize, String> {
+    library::set_off(&current(&app, &state)?, &kind, &sources, off)
 }
 
 /// The front page's status: the game folder, the game's build, ReSkate's version, whether the mods on disk are what a
@@ -869,7 +870,7 @@ fn main() {
             build,
             launch,
             attach_dll,
-            set_item_off,
+            set_items_off,
             launcher_status,
             templates_save,
             pack_build,

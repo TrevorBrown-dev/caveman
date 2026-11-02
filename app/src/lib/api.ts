@@ -84,12 +84,17 @@ export async function clearSettings(source: string): Promise<boolean> {
   return true;
 }
 
-/** Switches a deck or wheel off or on for the build. */
-export async function setItemOff(kind: 'deck' | 'wheel', source: string, off: boolean): Promise<boolean> {
-  if (inTauri) return invoke<boolean>('set_item_off', { kind, source, off });
-  if (off) mockOff.add(source);
-  else mockOff.delete(source);
-  return true;
+/** Switches decks or wheels off or on for the build: one, a folder's or all of them. Returns how many changed. */
+export async function setItemsOff(kind: 'deck' | 'wheel', sources: string[], off: boolean): Promise<number> {
+  if (inTauri) return invoke<number>('set_items_off', { kind, sources, off });
+  let changed = 0;
+  for (const source of sources) {
+    if (off === mockOff.has(source)) continue;
+    if (off) mockOff.add(source);
+    else mockOff.delete(source);
+    changed++;
+  }
+  return changed;
 }
 
 export async function fittedArt(source: string): Promise<Fitted> {

@@ -12,8 +12,9 @@
     live?: boolean;
     /** The picture on the live board (its file name), marked on its card. */
     boardArt?: string | null;
-    /** A switch per item for what goes into the game (the Studio); none in the live library. */
-    ontoggle?: (item: LibraryItem, on: boolean) => void;
+    /** Switches for what goes into the game (the Studio): one per item, one per folder and one for the whole list,
+     * each passing the items it covers; none in the live library. */
+    ontoggle?: (items: LibraryItem[], on: boolean) => void;
   }
   let { library, selected, onselect, tab = $bindable('deck'), live = false, boardArt = null, ontoggle }: Props = $props();
 
@@ -21,7 +22,9 @@
   let collapsed = $state<Record<string, boolean>>({});
 
   const items = $derived(library ? (tab === 'deck' ? library.decks : library.wheels) : []);
+  const noun = $derived(tab === 'deck' ? 'deck' : 'wheel');
   const on = $derived(items.filter((i) => i.enabled).length);
+  const searching = $derived(query.trim() !== '');
   const filtered = $derived.by(() => {
     const q = query.trim().toLowerCase();
     if (!q) return items;
@@ -39,6 +42,8 @@
     }
     return [...map.entries()].sort((a, b) => a[0].localeCompare(b[0]));
   });
+  // the "all" switch covers what the list shows (everything, or what the search matched)
+  const shownOn = $derived(filtered.filter((i) => i.enabled).length);
 
   function thumb(item: LibraryItem): string {
     return fileUrl(item.preview ?? item.source, item.modified);
@@ -62,7 +67,20 @@
     <input type="search" placeholder={`Search ${tab === 'deck' ? 'decks' : 'wheels'}, folders, effects`} bind:value={query} />
   </div>
   {#if ontoggle && items.length > 0}
-    <p class="on-line faint">{on} of {items.length} in the game; the switch on a card takes one out (its files stay).</p>
+    <div class="all-row" title={`Switched off, a ${noun} stays out of the build; its files stay where they are`}>
+      <label class="all">
+        <input
+          class="switch"
+          type="checkbox"
+          checked={filtered.length > 0 && shownOn === filtered.length}
+          indeterminate={shownOn > 0 && shownOn < filtered.length}
+          disabled={filtered.length === 0}
+          onchange={(e) => ontoggle(filtered, e.currentTarget.checked)}
+        />
+        <span>{searching ? `All ${filtered.length.toLocaleString()} shown` : `All ${noun}s`}</span>
+      </label>
+      <span class="faint">{on.toLocaleString()} of {items.length.toLocaleString()} in the game</span>
+    </div>
   {/if}
   {#if live}
     <p class="live-hint">
@@ -88,18 +106,33 @@
     {/if}
 
     {#each groups as [group, list] (group)}
+      {@const name = group === '' ? 'Top folder' : group}
+      {@const groupOn = list.filter((i) => i.enabled).length}
       <section class="group">
-        <button class="group-head ghost" onclick={() => (collapsed[group] = !collapsed[group])} aria-expanded={!collapsed[group]}>
-          <span class="chev" class:shut={collapsed[group]}>&#9662;</span>
-          <span class="group-name">{group === '' ? 'Top folder' : group}</span>
-          <span class="count">{list.length}</span>
-        </button>
+        <div class="group-head">
+          {#if ontoggle}
+            <input
+              class="switch"
+              type="checkbox"
+              checked={groupOn === list.length}
+              indeterminate={groupOn > 0 && groupOn < list.length}
+              title={searching ? `The ${list.length} shown in this folder: on or off` : `Every ${noun} in this folder: on or off`}
+              onchange={(e) => ontoggle(list, e.currentTarget.checked)}
+              aria-label={`${name}: all in the game`}
+            />
+          {/if}
+          <button class="group-toggle ghost" class:off={ontoggle && groupOn === 0} onclick={() => (collapsed[group] = !collapsed[group])} aria-expanded={!collapsed[group]}>
+            <span class="chev" class:shut={collapsed[group]}>&#9662;</span>
+            <span class="group-name">{name}</span>
+            <span class="count">{ontoggle && groupOn < list.length ? `${groupOn} of ${list.length}` : list.length}</span>
+          </button>
+        </div>
         {#if !collapsed[group]}
           <ul>
             {#each list as item (item.source)}
               <li class="row-item" class:off={ontoggle && !item.enabled}>
                 {#if ontoggle}
-                  <input class="switch" type="checkbox" checked={item.enabled} title={item.enabled ? 'In the game: switch off to leave it out of the build' : 'Out of the build: switch on'} onchange={(e) => ontoggle(item, e.currentTarget.checked)} aria-label={`${item.display} in the game`} />
+                  <input class="switch" type="checkbox" checked={item.enabled} title={item.enabled ? 'In the game: switch off to leave it out of the build' : 'Out of the build: switch on'} onchange={(e) => ontoggle([item], e.currentTarget.checked)} aria-label={`${item.display} in the game`} />
                 {/if}
                 <button class="card" class:selected={selected === item.source} onclick={() => onselect(item)}>
                   <span class="thumb" class:wheel={item.kind === 'wheel'} style:background-color={item.colour ?? undefined}>
@@ -187,8 +220,14 @@
   .group-head {
     display: flex;
     align-items: center;
+    gap: 4px;
+  }
+  .group-toggle {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    align-items: center;
     gap: 6px;
-    width: 100%;
     padding: 6px 6px;
     font-size: 12px;
     font-weight: 600;
@@ -196,9 +235,20 @@
     text-transform: uppercase;
     color: var(--text-dim);
   }
+  .group-toggle.off {
+    opacity: 0.55;
+  }
   .group-name {
     flex: 1;
+    min-width: 0;
     text-align: left;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .group-toggle .count {
+    flex: none;
+    text-transform: none;
   }
   .chev {
     display: inline-block;
@@ -228,9 +278,28 @@
     flex: none;
     margin: 0 0 0 4px;
   }
-  .on-line {
-    margin: 0 12px 8px;
+  /* the switch lines up with the folder and card switches below (8px list padding + the switch's 4px) */
+  .all-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin: 0 8px;
+    padding: 0 6px 8px 0;
+    border-bottom: 1px solid var(--line);
     font-size: 12px;
+  }
+  .all {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+    cursor: pointer;
+  }
+  .all-row .faint {
+    white-space: nowrap;
   }
   .card {
     display: flex;

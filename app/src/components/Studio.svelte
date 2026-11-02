@@ -135,11 +135,15 @@
     }
   }
 
-  async function toggle(item: LibraryItem, on: boolean): Promise<void> {
+  // one item's switch, or a folder's or the whole tab's at once (all of one kind: the library shows one tab)
+  async function toggle(items: LibraryItem[], on: boolean): Promise<void> {
+    const change = items.filter((i) => i.enabled !== on);
+    if (change.length === 0) return;
     try {
-      await api.setItemOff(item.kind, item.source, !on);
+      await api.setItemsOff(change[0].kind, change.map((i) => i.source), !on);
       await onrefresh();
       onbuilt?.();
+      if (change.length > 1) onsay(`${change.length} ${change[0].kind}s ${on ? 'switched on' : 'switched off'}`);
     } catch (e) {
       onsay(String(e), 'error');
     }

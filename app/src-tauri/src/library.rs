@@ -116,16 +116,21 @@ fn item(f: &Found, root: &Path, previews: &Path, off: &OffList) -> LibraryItem {
     }
 }
 
-/// Switches one deck or wheel off or on in its drop folder's `.caveman-off.json` (the root is the folder the file is
-/// under: decks or wheels, by `kind`).
-pub fn set_off(config: &Config, kind: &str, source: &Path, off: bool) -> Result<bool, String> {
+/// Switches decks or wheels off or on in their drop folder's `.caveman-off.json` (the root is the folder the files are
+/// under: decks or wheels, by `kind`), one item or a whole folder or library at once, with one write of the file.
+/// Returns how many changed.
+pub fn set_off(config: &Config, kind: &str, sources: &[String], off: bool) -> Result<usize, String> {
+    // switches clicked in quick succession arrive as commands on several threads: one read-change-write at a time, so
+    // none is lost (the commands run off the main thread, where a wait is harmless)
+    static WRITING: Mutex<()> = Mutex::new(());
+    let _one_at_a_time = WRITING.lock().unwrap_or_else(|e| e.into_inner());
     let root = if kind == "wheel" { config.wheels_dir() } else { config.decks_dir() };
     let (mut list, problem) = OffList::load(&root);
     if let Some(p) = problem {
         return Err(format!("the switch file cannot be read: {p}"));
     }
-    let changed = list.set(&root, source, off);
-    if changed {
+    let changed = sources.iter().filter(|s| list.set(&root, Path::new(s), off)).count();
+    if changed > 0 {
         list.save(&root).map_err(|e| format!("{}: {e}", OffList::path(&root).display()))?;
     }
     Ok(changed)
