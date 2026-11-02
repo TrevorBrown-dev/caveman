@@ -120,6 +120,19 @@ export async function boardModel(force = false): Promise<string> {
   throw new Error('the board model is built from the game, which the stand-in back end has not');
 }
 
+/**
+ * The board for the Studio's preview as a glTF binary: the stock board as the game draws it (the deck mesh, black
+ * grip, the default trucks, natural wheels), or with one of the player's own wheels on it (its PNG and "#rrggbb"
+ * colour), built from the install and cached. Its path. The stand-in back end serves the model named by
+ * `CAVEMAN_MOCK_BOARD` when `pnpm dev:mock` was started with it, whatever the wheel.
+ */
+export async function studioBoardModel(wheel: string | null, colour: string | null): Promise<string> {
+  if (inTauri) return invoke<string>('studio_board_model', { wheel, colour });
+  const response = await fetch('/__mock/board');
+  if (!response.ok) throw new Error('the board model is built from the game, which the stand-in back end has not');
+  return ((await response.json()) as { path: string }).path;
+}
+
 /** What is on the board in the game (`board_art`): the DLL's label for the picture and the fitted PNG for it. */
 export interface BoardArt {
   /** The DLL answered; else the label and the path are nothing. */

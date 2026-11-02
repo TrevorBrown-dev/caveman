@@ -2,8 +2,9 @@
 //! for an equipped loadout (ignored: reads the install).
 //! `cargo test -p caveman-core --test board_model -- --ignored --nocapture`
 
-use caveman_core::boardmodel::{self, Loadout, LANES};
+use caveman_core::boardmodel::{self, Loadout, OwnWheel, LANES};
 use caveman_core::game::Game;
+use caveman_core::image::Image;
 use std::path::Path;
 
 const GAME: &str = r"E:\Games\ReSkate";
@@ -124,4 +125,40 @@ fn build_equipped_glb() {
     }
     let out = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../target/board-other.glb");
     boardmodel::write_glb(&model, &out).unwrap();
+}
+
+/// One of the player's own wheels on the stock board (the Studio's preview): a yellow disc on a transparent face, in
+/// blue. The urethane takes the blue as its region colour, and each wheel's outer face shows the disc.
+#[test]
+#[ignore]
+fn build_own_wheel_glb() {
+    let game = Game::open(Path::new(GAME)).unwrap();
+    let mut face = Image::filled(256, 256, &[0, 0, 0, 0]);
+    for y in 0..256 {
+        for x in 0..256 {
+            let (dx, dy) = (x as f32 - 127.5, y as f32 - 127.5);
+            if dx * dx + dy * dy < 80.0 * 80.0 {
+                face.data[(y * 256 + x) * 4..(y * 256 + x) * 4 + 4].copy_from_slice(&[255, 220, 0, 255]);
+            }
+        }
+    }
+    let own = OwnWheel { face, colour: [0, 110, 255] };
+    let model = boardmodel::read_board_model_with(&game, &Loadout::stock(), Some(&own)).unwrap();
+    describe(&model);
+    assert!(model.notes.iter().any(|n| n.contains("graphic the wheel's own face") && n.contains("over 4 wheel(s)")), "{:?}", model.notes);
+    let wheels = model.materials.iter().find(|m| m.role == "wheels").unwrap();
+    let base = wheels.base.as_ref().unwrap();
+    let (mut r, mut b) = (0u64, 0u64);
+    for px in base.data.chunks_exact(base.channels) {
+        r += px[0] as u64;
+        b += px[2] as u64;
+    }
+    assert!(b > r * 2, "the wheels are not blue: r {r} b {b}");
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../target/board-textures");
+    for m in model.materials.iter().filter(|m| m.name.starts_with("Wheel_Mat:")) {
+        m.base.as_ref().unwrap().write_png(dir.join(format!("own_{}.png", m.name.replace(':', "_")))).unwrap();
+    }
+    let out = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../target/board-own-wheel.glb");
+    let facts = boardmodel::build_with(&game, &Loadout::stock(), Some(&own), &out).unwrap();
+    println!("wrote {} ({} bytes): {facts}", out.display(), std::fs::metadata(&out).unwrap().len());
 }

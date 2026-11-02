@@ -6,7 +6,8 @@ import { resolve, normalize } from 'node:path';
 /**
  * `pnpm dev:mock`: the app in a plain browser with a stand-in back end (mock/library.json, written by the back end's
  * `dump_mock_fixture` test), so the UI can be reviewed without the Tauri window. Image files come through
- * `/__mock/file?path=...`, limited to the folders the fixture names.
+ * `/__mock/file?path=...`, limited to the folders the fixture names. `CAVEMAN_MOCK_BOARD=<a .glb>` gives the Studio's
+ * preview the game's board (`cargo test -p caveman-core --test board_model -- --ignored` writes some to target/).
  */
 function mockBackend(): Plugin {
   const fixturePath = resolve(import.meta.dirname, 'mock', 'library.json');
@@ -24,10 +25,22 @@ function mockBackend(): Plugin {
           res.end(existsSync(fixturePath) ? readFileSync(fixturePath) : '{"error": "no mock/library.json"}');
           return;
         }
+        // the Studio's board model: a .glb named by CAVEMAN_MOCK_BOARD (the board_model tests write some to target/)
+        const board = process.env.CAVEMAN_MOCK_BOARD ? normalize(resolve(process.env.CAVEMAN_MOCK_BOARD)) : null;
+        if (url.pathname === '/__mock/board') {
+          if (!board || !existsSync(board)) {
+            res.statusCode = 404;
+            res.end();
+            return;
+          }
+          res.setHeader('Content-Type', 'application/json');
+          res.end(JSON.stringify({ path: board }));
+          return;
+        }
         if (url.pathname === '/__mock/file') {
           const fixture = existsSync(fixturePath) ? JSON.parse(readFileSync(fixturePath, 'utf8')) : { roots: [] };
           const path = normalize(url.searchParams.get('path') ?? '');
-          const allowed = (fixture.roots as string[]).some((root) => path.toLowerCase().startsWith(normalize(root).toLowerCase()));
+          const allowed = (fixture.roots as string[]).some((root) => path.toLowerCase().startsWith(normalize(root).toLowerCase())) || (board !== null && path.toLowerCase() === board.toLowerCase());
           if (!allowed || !existsSync(path) || !statSync(path).isFile()) {
             res.statusCode = 404;
             res.end();

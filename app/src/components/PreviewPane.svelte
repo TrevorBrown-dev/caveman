@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onDestroy, onMount, untrack } from 'svelte';
   import { Preview, type Mode } from '../lib/preview/scene';
+  import { readBytes, studioBoardModel } from '../lib/api';
   import type { Settings } from '../lib/types';
 
   interface Props {
@@ -8,24 +9,70 @@
     settings: Settings | null;
     wheelColour: string;
     wheelFace: ImageBitmap | null;
+    /** The wheel being looked at (its PNG), put on the game's board; none: the natural wheels. */
+    wheelSource?: string | null;
     loading: boolean;
     title: string;
     onautocolour: (c: string) => void;
     /** The mode to start in (the buttons change it after). */
     mode?: Mode;
   }
-  let { art, settings, wheelColour, wheelFace, loading, title, onautocolour, mode: startMode = 'showcase' }: Props = $props();
+  let { art, settings, wheelColour, wheelFace, wheelSource = null, loading, title, onautocolour, mode: startMode = 'showcase' }: Props = $props();
 
   let host: HTMLDivElement;
   let preview: Preview | null = null;
+  let mounted = $state(false);
   let mode = $state<Mode>('showcase');
   let timer: ReturnType<typeof setTimeout> | null = null;
+  /** The game's board: what is being fetched, and whether it is shown (else the drawn board, and why). */
+  let modelNote = $state<string | null>(null);
+  let gameBoard = $state(false);
+  let modelProblem = $state<string | null>(null);
+  let modelSeq = 0;
 
   onMount(() => {
     preview = new Preview(host);
     (window as unknown as { cavemanPreview: Preview }).cavemanPreview = preview;
+    mounted = true;
   });
-  onDestroy(() => preview?.dispose());
+  onDestroy(() => {
+    modelSeq++;
+    preview?.dispose();
+  });
+
+  // The game's board, with the wheel being looked at: built by the back end (seconds the first time, cached after);
+  // the board shown stays until the new one is in, and only the newest request counts.
+  $effect(() => {
+    const source = wheelSource;
+    const colour = wheelColour;
+    if (mounted) void loadBoard(source, colour);
+  });
+
+  async function loadBoard(source: string | null, colour: string): Promise<void> {
+    const seq = ++modelSeq;
+    const wait = setTimeout(() => {
+      if (seq === modelSeq) modelNote = source ? 'Putting the wheel on the board...' : 'Building the board from the game...';
+    }, 400);
+    preview?.expectModel(true);
+    try {
+      const path = await studioBoardModel(source, source ? colour : null);
+      if (seq !== modelSeq) return;
+      const bytes = await readBytes(path);
+      if (seq !== modelSeq || !preview) return;
+      await preview.setGameModel(bytes);
+      if (seq !== modelSeq) return;
+      gameBoard = true;
+      modelProblem = null;
+    } catch (e) {
+      if (seq === modelSeq) modelProblem = String(e);
+    } finally {
+      clearTimeout(wait);
+      if (seq === modelSeq) {
+        modelNote = null;
+        preview?.expectModel(false);
+      }
+    }
+  }
 
   // Rebuild the deck's textures when the art or its settings change (a little after a slider stops moving).
   $effect(() => {
@@ -67,11 +114,15 @@
       <button class="ghost" title="Reset the view" onclick={() => preview?.resetView()}>Reset view</button>
     </div>
   </div>
-  {#if loading}
-    <div class="loading">Fitting the art...</div>
+  {#if loading || modelNote}
+    <div class="loading">{loading ? 'Fitting the art...' : modelNote}</div>
   {/if}
   <div class="overlay bottom">
-    <span class="note">Approximate preview: the game's shaders and lighting differ. Drag to orbit, scroll to zoom.</span>
+    {#if gameBoard}
+      <span class="note">The game's own board, grip, trucks and wheels; its shaders and lighting are approximated. Drag to orbit, scroll to zoom.</span>
+    {:else}
+      <span class="note" title={modelProblem ?? ''}>Approximate preview: a drawn board{modelProblem ? ` (the game's could not be read)` : ''}. Drag to orbit, scroll to zoom.</span>
+    {/if}
   </div>
 </div>
 

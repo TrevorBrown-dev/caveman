@@ -1,8 +1,12 @@
 // The 3D preview: the deck with its finish, emboss, holo, glow and colour cycle, trucks and wheels, and a ride mode
-// that shows the board's effects (aura light and trails, the solid rainbow trail). It approximates the game with
-// three.js materials; the in-game look is the reference.
+// that shows the board's effects (aura light and trails, the solid rainbow trail). The board is the game's own once
+// the back end has built it from the install (`setGameModel`: the deck mesh, black grip, the default trucks, the
+// natural wheels or the wheel being looked at; the deck art goes on the deck's graphic layer, as in the game); until
+// then, or without the game, a board drawn here stands in. The materials approximate the game's shaders with
+// three.js's; the in-game look is the reference.
 
 import * as THREE from 'three';
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
@@ -12,7 +16,8 @@ import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 
 import type { Settings } from '../types';
 import { glowFactor } from '../effects';
-import { AXLE_Y, GROUND_Y, TRUCK_Z, deckGeometries, trucksAndWheels } from './deck';
+import { AXLE_Y, GROUND_Y, TRUCK_Z, WHEEL_RADIUS, deckGeometries, trucksAndWheels } from './deck';
+import { DECK_LANE, WHEEL_LANES, gritty, lanesOf } from './board';
 import * as maps from './maps';
 
 export type Mode = 'showcase' | 'ride';
@@ -31,6 +36,26 @@ interface TrailPoint {
   x: number;
   z: number;
   age: number;
+}
+
+/** Where the board's parts are, in board space: what the effects are placed by. */
+interface Dims {
+  /** The trucks' centres along the board, nose first. */
+  truckZ: number[];
+  axleY: number;
+  /** The ground under the wheels. */
+  groundY: number;
+  wheelRadius: number;
+}
+
+/** The game's board, loaded: its node (the deck's, under a holder that centres it) and what it is made of. */
+interface GameBoard {
+  holder: THREE.Group;
+  /** The game's graphic material (its textures' placement on the second UV set, its occlusion and normal map). */
+  graphic: THREE.MeshStandardMaterial;
+  /** The wheels' nodes, their rotation as loaded and the board's axle (x) in each one's frame, for rolling. */
+  wheels: { node: THREE.Object3D; bind: THREE.Quaternion; axle: THREE.Vector3 }[];
+  dispose: () => void;
 }
 
 /** The art's most vivid colour at full brightness (mixins.art_colour): an aura's colour when none is given. */
@@ -117,6 +142,12 @@ export class Preview {
   private updatedAt = -1;
   private rideTime = 0;
   private resize: ResizeObserver;
+  /** The board drawn here, shown until the game's is in. */
+  private drawnBoard: THREE.Object3D[] = [];
+  private game: GameBoard | null = null;
+  private dims: Dims = { truckZ: [...TRUCK_Z], axleY: AXLE_Y, groundY: GROUND_Y, wheelRadius: WHEEL_RADIUS };
+  private rolled = 0;
+  private modelPending = false;
 
   constructor(private host: HTMLElement) {
     this.renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
@@ -156,20 +187,19 @@ export class Preview {
     this.deckMaterial.customProgramCacheKey = () => 'caveman-deck';
     const grip = new THREE.MeshStandardMaterial({ map: maps.gripTexture(), roughness: 0.95, metalness: 0 });
     const edge = new THREE.MeshStandardMaterial({ map: maps.edgeTexture(), roughness: 0.6, metalness: 0 });
-    this.board.add(new THREE.Mesh(geo.bottom, this.deckMaterial), new THREE.Mesh(geo.top, grip), new THREE.Mesh(geo.edge, edge));
+    this.drawnBoard.push(new THREE.Mesh(geo.bottom, this.deckMaterial), new THREE.Mesh(geo.top, grip), new THREE.Mesh(geo.edge, edge));
 
     const metal = new THREE.MeshStandardMaterial({ color: '#8d9097', roughness: 0.45, metalness: 1 });
     this.wheelMaterial = new THREE.MeshPhysicalMaterial({ color: '#e9e5dc', roughness: 0.62, metalness: 0 });
     this.faceMaterial = new THREE.MeshPhysicalMaterial({ color: '#e9e5dc', roughness: 0.55, metalness: 0 });
-    this.board.add(trucksAndWheels(metal, this.wheelMaterial, this.faceMaterial));
+    this.drawnBoard.push(trucksAndWheels(metal, this.wheelMaterial, this.faceMaterial));
+    this.board.add(...this.drawnBoard);
 
-    // the aura: a light under each truck, and a soft halo that shows it in the showcase
+    // the aura: a light under each truck, and a soft halo that shows it in the showcase (placed by `placeEffects`)
     const haloTexture = halo();
-    for (const z of TRUCK_Z) {
+    for (let k = 0; k < TRUCK_Z.length; k++) {
       const light = new THREE.PointLight('#ffffff', 0, 1.4, 2);
-      light.position.set(0, AXLE_Y + 0.012, z);
       const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: haloTexture, blending: THREE.AdditiveBlending, depthWrite: false, transparent: true, opacity: 0.6 }));
-      sprite.position.copy(light.position);
       sprite.scale.set(0.32, 0.32, 1);
       sprite.visible = false;
       this.auraLights.push(light);
@@ -188,7 +218,6 @@ export class Preview {
       new THREE.MeshStandardMaterial({ map: this.groundTexture, roughness: 0.92, metalness: 0 }),
     );
     this.ground.rotation.x = -Math.PI / 2;
-    this.ground.position.y = GROUND_Y - 0.001;
     this.ground.visible = false;
     this.scene.add(this.ground);
     this.shadow = new THREE.Mesh(
@@ -196,9 +225,9 @@ export class Preview {
       new THREE.MeshBasicMaterial({ map: shadowTexture(), transparent: true, depthWrite: false, opacity: 0.75 }),
     );
     this.shadow.rotation.x = -Math.PI / 2;
-    this.shadow.position.y = GROUND_Y;
     this.shadow.visible = false;
     this.scene.add(this.shadow);
+    this.placeEffects();
 
     this.nyanMesh = new THREE.Mesh(new THREE.BufferGeometry(), new THREE.MeshBasicMaterial({ map: maps.nyanTexture(), side: THREE.DoubleSide }));
     this.nyanMesh.frustumCulled = false;
@@ -300,9 +329,173 @@ export class Preview {
       this.bloom.enabled = false;
     }
     this.uniforms.uCycleSpeed.value = settings?.shader?.effect === 'cycle' ? settings.shader.speed ?? 0.25 : 0;
-    m.needsUpdate = true;
+    this.placeDeckTextures();
     this.updatedAt = this.frames;
     this.updateBoardEffect();
+  }
+
+  /**
+   * The deck's textures where the board shown wants them. On the game's deck they go exactly where the game's
+   * graphic texture goes: its UV set (the second: the first is the wood's layout) and its transform, the image's
+   * first row at v = 0 (as glTF has it); the game's occlusion comes along, and its normal map where no emboss or
+   * glitter makes one. On the drawn deck: the first set, flipped as three.js's canvases are.
+   */
+  private placeDeckTextures(): void {
+    const m = this.deckMaterial;
+    const stock = this.game?.graphic ?? null;
+    const place = stock?.map ?? null;
+    const ours = new Set<THREE.Texture>([...this.generated, ...(this.artTexture ? [this.artTexture] : [])]);
+    if (!this.artTexture) {
+      // no picture (none chosen, or an animated deck): the game's own graphic, the Natural Blank's wood
+      m.map = stock?.map ?? null;
+      m.color.set(stock ? '#ffffff' : '#d8c3a0');
+    }
+    if (!m.normalMap || !ours.has(m.normalMap)) {
+      // the game's (or none on the drawn deck), with its scale: glTF's green runs the other way to three.js's
+      m.normalMap = stock?.normalMap ?? null;
+      if (stock) m.normalScale.copy(stock.normalScale);
+    } else {
+      // ours, made for the drawn deck's flipped rows: on the game's deck the rows run the other way, and so does green
+      m.normalScale.y = place ? -Math.abs(m.normalScale.y) : Math.abs(m.normalScale.y);
+    }
+    m.aoMap = stock?.aoMap ?? null;
+    for (const t of ours) {
+      t.channel = place ? place.channel : 0;
+      if (place) {
+        t.offset.copy(place.offset);
+        t.repeat.copy(place.repeat);
+        t.rotation = place.rotation;
+        t.center.copy(place.center);
+        t.wrapS = THREE.RepeatWrapping;
+        t.wrapT = THREE.RepeatWrapping;
+      } else {
+        t.offset.set(0, 0);
+        t.repeat.set(1, 1);
+        t.rotation = 0;
+        t.center.set(0, 0);
+      }
+      const flip = !place;
+      if (t.flipY !== flip) {
+        t.flipY = flip;
+        t.needsUpdate = true;
+      }
+    }
+    m.needsUpdate = true;
+  }
+
+  /** The effects' places from where the board's parts are: the aura's lights and halos, the ground, the shadow. */
+  private placeEffects(): void {
+    this.auraLights.forEach((light, k) => {
+      light.position.set(0, this.dims.axleY + 0.012, this.dims.truckZ[k] ?? 0);
+      this.auraHalos[k].position.copy(light.position);
+    });
+    this.ground.position.y = this.dims.groundY - 0.001;
+    this.shadow.position.y = this.dims.groundY;
+  }
+
+  /** Whether a board model is on its way (screenshots wait for it). */
+  expectModel(pending: boolean): void {
+    this.modelPending = pending;
+  }
+
+  /**
+   * The game's board (the back end's glTF binary, `studio_board_model`) in place of the drawn one, or of the game's
+   * board shown before (another wheel). The deck node leaves the rig behind (its frame is the board's) and is centred
+   * as the drawn deck is: the middle of its bottom at the origin, so the showcase stands it up the same way.
+   */
+  async setGameModel(bytes: ArrayBuffer): Promise<void> {
+    const gltf = await new GLTFLoader().parseAsync(bytes, '');
+    const lanes = lanesOf(gltf.scene);
+    const deck = gltf.scene.getObjectByName(lanes[DECK_LANE]);
+    if (!deck) throw new Error('the board model has no deck bone');
+    deck.removeFromParent();
+    deck.position.set(0, 0, 0);
+    deck.quaternion.identity();
+    deck.scale.set(1, 1, 1);
+    const holder = new THREE.Group();
+    holder.add(deck);
+    holder.updateMatrixWorld(true);
+
+    const owned = new Set<{ dispose: () => void }>();
+    const graphicMeshes: THREE.Mesh[] = [];
+    // (assigned in the callback, which the compiler's narrowing does not follow)
+    let graphic = null as THREE.MeshStandardMaterial | null;
+    deck.traverse((o) => {
+      const mesh = o as THREE.Mesh;
+      if (!mesh.isMesh) return;
+      owned.add(mesh.geometry);
+      const mat = mesh.material as THREE.MeshStandardMaterial;
+      owned.add(mat);
+      for (const t of [mat.map, mat.normalMap, mat.roughnessMap, mat.metalnessMap, mat.aoMap, mat.emissiveMap]) {
+        if (!t) continue;
+        t.anisotropy = 8;
+        owned.add(t);
+      }
+      if (mat.userData?.role === 'graphic') {
+        graphic ??= mat;
+        graphicMeshes.push(mesh);
+      }
+      if (mat.userData?.role === 'grip') gritty(mat);
+    });
+    if (!graphic) throw new Error('the board model has no deck graphic');
+
+    // centred: the bottom's middle at the origin
+    const bottom = new THREE.Box3();
+    for (const mesh of graphicMeshes) bottom.expandByObject(mesh);
+    holder.position.set(-(bottom.min.x + bottom.max.x) / 2, -bottom.min.y, -(bottom.min.z + bottom.max.z) / 2);
+    holder.updateMatrixWorld(true);
+
+    // where the wheels are: the trucks' places, the axles' height, the ground, and each wheel's axle in its own
+    // frame (the board's x: a wheel rolling forward turns about it)
+    const wheels: GameBoard['wheels'] = [];
+    const centres: THREE.Vector3[] = [];
+    let groundY = Infinity;
+    let radius = 0;
+    for (const lane of WHEEL_LANES) {
+      const node = deck.getObjectByName(lanes[lane]);
+      if (!node) continue;
+      const centre = node.getWorldPosition(new THREE.Vector3());
+      const box = new THREE.Box3().setFromObject(node);
+      centres.push(centre);
+      groundY = Math.min(groundY, box.min.y);
+      radius = Math.max(radius, centre.y - box.min.y);
+      const axle = new THREE.Vector3(1, 0, 0).applyQuaternion(node.getWorldQuaternion(new THREE.Quaternion()).invert());
+      wheels.push({ node, bind: node.quaternion.clone(), axle });
+    }
+    if (centres.length === 4) {
+      const front = centres.filter((c) => c.z > 0);
+      const back = centres.filter((c) => c.z <= 0);
+      const meanZ = (list: THREE.Vector3[]): number => list.reduce((a, c) => a + c.z, 0) / Math.max(list.length, 1);
+      this.dims = {
+        truckZ: [meanZ(front), meanZ(back)],
+        axleY: centres.reduce((a, c) => a + c.y, 0) / centres.length,
+        groundY,
+        wheelRadius: radius > 0.005 ? radius : WHEEL_RADIUS,
+      };
+    }
+
+    for (const mesh of graphicMeshes) mesh.material = this.deckMaterial;
+    const old = this.game;
+    this.game = {
+      holder,
+      graphic,
+      wheels,
+      dispose: () => {
+        for (const d of owned) {
+          if (d !== this.deckMaterial) d.dispose();
+        }
+      },
+    };
+    this.board.add(holder);
+    for (const o of this.drawnBoard) o.visible = false;
+    if (old) {
+      this.board.remove(old.holder);
+      old.dispose();
+    }
+    this.rolled = 0;
+    this.placeDeckTextures();
+    this.placeEffects();
+    this.updatedAt = this.frames;
   }
 
   /** The aura's colour when the settings give none (the art's). */
@@ -368,7 +561,7 @@ export class Preview {
 
   /** Whether a deck with art has been drawn for a while (and, riding, long enough for the trails): for screenshots. */
   ready(): boolean {
-    const drawn = this.artTexture !== null && this.updatedAt >= 0 && this.frames - this.updatedAt > 20;
+    const drawn = this.artTexture !== null && !this.modelPending && this.updatedAt >= 0 && this.frames - this.updatedAt > 20;
     return drawn && (this.mode !== 'ride' || this.rideTime > TRAIL_LIFE + 0.4);
   }
 
@@ -428,6 +621,12 @@ export class Preview {
     this.board.position.set(sway, 0, 0);
     this.board.rotation.set(0, yaw, -0.06 * Math.cos(t * 1.3));
     this.shadow.position.x = sway;
+    // the game's wheels roll with the ground (forward is the nose's way: a turn about the board's x)
+    if (this.game) {
+      this.rolled = (this.rolled + (RIDE_SPEED * dt) / this.dims.wheelRadius) % (Math.PI * 2);
+      const turn = new THREE.Quaternion();
+      for (const w of this.game.wheels) w.node.quaternion.copy(w.bind).multiply(turn.setFromAxisAngle(w.axle, this.rolled));
+    }
     // trail points stay where they were laid while the world moves back
     const move = RIDE_SPEED * dt;
     for (const p of this.nyanPoints) {
@@ -446,7 +645,7 @@ export class Preview {
       const effect = this.settings?.board?.effect ?? 'none';
       if (effect === 'nyan') this.nyanPoints.push({ x: sway, z: 0, age: 0 });
       if (effect === 'aura') {
-        TRUCK_Z.forEach((z, k) => {
+        this.dims.truckZ.forEach((z, k) => {
           const local = new THREE.Vector3(0, 0, z).applyEuler(this.board.rotation);
           this.auraPoints[k].push({ x: sway + local.x, z: local.z, age: 0 });
         });
@@ -455,11 +654,11 @@ export class Preview {
     this.nyanPoints = this.nyanPoints.filter((p) => p.age < TRAIL_LIFE);
     this.auraPoints = this.auraPoints.map((list) => list.filter((p) => p.age < 0.6));
     this.nyanMesh.visible = this.nyanPoints.length > 1;
-    if (this.nyanMesh.visible) ribbon(this.nyanMesh, this.nyanPoints, NYAN_WIDTH, GROUND_Y + NYAN_HEIGHT, this.travelled, null);
+    if (this.nyanMesh.visible) ribbon(this.nyanMesh, this.nyanPoints, NYAN_WIDTH, this.dims.groundY + NYAN_HEIGHT, this.travelled, null);
     const colour = new THREE.Color(this.auraColour);
     this.auraMeshes.forEach((m, k) => {
       m.visible = this.auraPoints[k].length > 1;
-      if (m.visible) ribbon(m, this.auraPoints[k], AURA_WIDTH, AXLE_Y, this.travelled, colour);
+      if (m.visible) ribbon(m, this.auraPoints[k], AURA_WIDTH, this.dims.axleY, this.travelled, colour);
     });
   }
 
@@ -469,6 +668,8 @@ export class Preview {
     this.controls.dispose();
     for (const t of this.generated) t.dispose();
     this.artTexture?.dispose();
+    this.game?.dispose();
+    this.game = null;
     this.renderer.dispose();
     this.renderer.domElement.remove();
   }

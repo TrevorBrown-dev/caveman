@@ -853,10 +853,29 @@ pub fn read_board_model(game: &Game) -> Result<BoardModel> {
     read_board_model_for(game, &Loadout::stock())
 }
 
+/// The graphic wheel Caveman's own wheels are built on (build.rs's `WHEEL_HOST_ITEM`), by its profile key.
+pub const OWN_WHEEL_HOST: &str = "Own_WheelGraphic_Gen_Classic_00006";
+
+/// One of the player's own wheels (a Caveman wheel, for the Studio's preview): its face graphic (any image, centre-
+/// cropped to a square) and its sRGB colour. It goes on the board as the game will show it once built: the host
+/// graphic wheel's mesh, the face and colour laid out by the build's own `build::wheel_textures` over the host's
+/// mask, the colour as the urethane's region colour.
+#[derive(Clone, Debug)]
+pub struct OwnWheel {
+    pub face: Image,
+    pub colour: [u8; 3],
+}
+
 /// The whole board as the player rides it: the deck mesh and the equipped trucks' and wheels' own meshes on the
 /// rig, with the equipped parts' textures (each falling back to the stock part's when it cannot be resolved;
 /// `notes` says what happened).
 pub fn read_board_model_for(game: &Game, loadout: &Loadout) -> Result<BoardModel> {
+    read_board_model_with(game, loadout, None)
+}
+
+/// The board as `read_board_model_for` reads it, with one of the player's own wheels in place of the loadout's.
+pub fn read_board_model_with(game: &Game, loadout: &Loadout, own_wheel: Option<&OwnWheel>) -> Result<BoardModel> {
+    let wheels_key: &str = if own_wheel.is_some() { OWN_WHEEL_HOST } else { &loadout.wheels };
     let skeleton = read_skeleton(game)?;
     // the asset's bone -> the run-time lane, by name
     let lane_by_bone: Vec<Option<usize>> = skeleton.names.iter().map(|n| LANES.iter().position(|l| l.eq_ignore_ascii_case(n))).collect();
@@ -873,7 +892,7 @@ pub fn read_board_model_for(game: &Game, loadout: &Loadout) -> Result<BoardModel
 
     // the equipped items' presets, resolved once
     let truck_item = item_preset(game, &shared, &loadout.trucks);
-    let wheel_item = item_preset(game, &shared, &loadout.wheels);
+    let wheel_item = item_preset(game, &shared, wheels_key);
     // the trucks' own mesh: the truck item's model asset (type 2); the wheels': the bundle of their base texture
     let truck_model: Option<String> = item_assets(game, &shared, &loadout.trucks).ok().and_then(|a| a.into_iter().find(|(t, _)| *t == 2).map(|(_, n)| n));
     let mut truck_sections: Option<Vec<FullSection>> = None;
@@ -1130,14 +1149,26 @@ pub fn read_board_model_for(game: &Game, loadout: &Loadout) -> Result<BoardModel
             Ok(game.bundle(&name, ITEMS_TOC)?)
         };
         let (b, colour, graphic_face, stem) = match &wheel_item {
-            Ok((b, doc, stem)) => {
-                let colour = preset_colour(doc, WHEEL_COLOUR_KEY);
-                let face = any_texture(game, ITEMS_TOC, b, &format!("/{stem}"), "_c")
-                    .and_then(|(c, src)| any_texture(game, ITEMS_TOC, b, &format!("/{stem}"), "_osk").map(|(m, msrc)| (c, m, src, msrc)));
-                (b.clone(), colour, face, stem.clone())
-            }
+            Ok((b, doc, stem)) => match own_wheel {
+                // the player's own wheel on the host: the face and colour as the build writes them over the host's
+                // mask, the colour as the preset's
+                Some(own) => {
+                    let colour = own.colour.map(|c| srgb_to_linear(c as f64 / 255.0) as f32);
+                    let face = any_texture(game, ITEMS_TOC, b, &format!("/{stem}"), "_osk").map(|(host_mask, msrc)| {
+                        let (art, mask) = build::wheel_textures(&own.face, own.colour, &host_mask);
+                        (art, mask, "the wheel's own face".to_string(), msrc)
+                    });
+                    (b.clone(), Some(colour), face, stem.clone())
+                }
+                None => {
+                    let colour = preset_colour(doc, WHEEL_COLOUR_KEY);
+                    let face = any_texture(game, ITEMS_TOC, b, &format!("/{stem}"), "_c")
+                        .and_then(|(c, src)| any_texture(game, ITEMS_TOC, b, &format!("/{stem}"), "_osk").map(|(m, msrc)| (c, m, src, msrc)));
+                    (b.clone(), colour, face, stem.clone())
+                }
+            },
             Err(e) => {
-                notes.push(format!("wheels {}: {e}; the stock wheels", loadout.wheels));
+                notes.push(format!("wheels {}: {e}; the stock wheels", wheels_key));
                 (stock_bundle()?, None, None, String::new())
             }
         };
@@ -1162,7 +1193,7 @@ pub fn read_board_model_for(game: &Game, loadout: &Loadout) -> Result<BoardModel
         // texture of its own with the face carried into its first set where the mask says
         let mut per_wheel: Vec<(usize, Image)> = Vec::new();
         if let (Some(base), Some(c)) = (m.base.as_ref(), colour) {
-            notes.push(format!("wheels {}: preset {stem}, colour ({:.3}, {:.3}, {:.3}) linear", loadout.wheels, c[0], c[1], c[2]));
+            notes.push(format!("wheels {}: preset {stem}, colour ({:.3}, {:.3}, {:.3}) linear", wheels_key, c[0], c[1], c[2]));
             let tinted = match &region_mask {
                 Some(mask) => region_coloured(base, mask, c),
                 None => coloured(base, c),
@@ -1197,16 +1228,16 @@ pub fn read_board_model_for(game: &Game, loadout: &Loadout) -> Result<BoardModel
                     per_wheel.push((index, own));
                 }
                 if per_wheel.is_empty() {
-                    notes.push(format!("wheels {}: graphic {src}, but the wheel mesh has no second UV set to place it; the colour alone", loadout.wheels));
+                    notes.push(format!("wheels {}: graphic {src}, but the wheel mesh has no second UV set to place it; the colour alone", wheels_key));
                 } else {
-                    notes.push(format!("wheels {}: graphic {src} by {msrc}, on {shown_total} texel(s) over {} wheel(s)", loadout.wheels, per_wheel.len()));
+                    notes.push(format!("wheels {}: graphic {src} by {msrc}, on {shown_total} texel(s) over {} wheel(s)", wheels_key, per_wheel.len()));
                 }
                 m.sources.push(src);
                 m.sources.push(msrc);
             }
             m.base = Some(tinted);
         } else if colour.is_none() && !stem.is_empty() {
-            notes.push(format!("wheels {}: preset {stem} has no colour; the texture as it is", loadout.wheels));
+            notes.push(format!("wheels {}: preset {stem} has no colour; the texture as it is", wheels_key));
         }
         (m, per_wheel)
     };
@@ -1391,7 +1422,12 @@ pub fn build(game: &Game, out: &Path) -> Result<String> {
 
 /// Reads the board as the loadout has it and writes the glTF; returns a few facts for the log.
 pub fn build_for(game: &Game, loadout: &Loadout, out: &Path) -> Result<String> {
-    let model = read_board_model_for(game, loadout)?;
+    build_with(game, loadout, None, out)
+}
+
+/// `build_for` with one of the player's own wheels in place of the loadout's (the Studio's preview).
+pub fn build_with(game: &Game, loadout: &Loadout, own_wheel: Option<&OwnWheel>, out: &Path) -> Result<String> {
+    let model = read_board_model_with(game, loadout, own_wheel)?;
     write_glb(&model, out)?;
     let vertices: usize = model.parts.iter().map(|p| p.positions.len()).sum();
     let triangles: usize = model.parts.iter().map(|p| p.indices.len() / 3).sum();

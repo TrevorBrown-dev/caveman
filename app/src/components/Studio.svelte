@@ -218,6 +218,7 @@
           settings={liveSettings}
           wheelColour={wheel?.colour ?? '#f2efe8'}
           {wheelFace}
+          wheelSource={wheel?.source ?? null}
           loading={artLoading}
           title={deck ? `${deck.display}${dirty ? '  (unsaved)' : ''}` : 'No deck selected'}
           onautocolour={(c) => (autoColour = c)}

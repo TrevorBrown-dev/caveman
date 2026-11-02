@@ -16,6 +16,7 @@
   import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
   import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
   import * as maps from '../../lib/preview/maps';
+  import { DECK_LANE, LANES, gritty, lanesOf } from '../../lib/preview/board';
   import { boardArt, boardFrame, boardModel, imageBitmap, readBytes } from '../../lib/api';
   import * as live from '../../lib/live';
   import type { PoseFrame } from '../../lib/live';
@@ -54,10 +55,6 @@
     }
   });
 
-  /** The rig's bones in the pose's order (caveman_core::boardmodel::LANES); the model's nodes carry these names. */
-  const LANES = ['Reference', 'AITrajectory', 'Skateboard_Root', 'Deck', 'Truck_Back', 'eff_truckBack', 'Right_WheelBack', 'Left_WheelBack', 'Truck_Front', 'eff_truckFront', 'Right_WheelFront', 'Left_WheelFront', 'Trajectory', 'Connect', 'Connect2', 'Ground'];
-  /** The deck's lane: the board's own frame, which the entity's turn is applied to. */
-  const DECK_LANE = 3;
   /** The lanes posed from the stream: the deck and everything under it (the trucks, their effectors, the wheels). */
   const POSED_LANES = [3, 4, 5, 6, 7, 8, 9, 10, 11];
 
@@ -135,47 +132,6 @@
     const m = new THREE.Matrix4();
     m.makeBasis(new THREE.Vector3(...r), new THREE.Vector3(...u), new THREE.Vector3(f[0] * nose, f[1] * nose, f[2] * nose));
     return m;
-  }
-
-  /**
-   * Grip tape's grit and sparkle on the grip's material: the grain's normal map pressed harder, and a glitter term
-   * (the game's grip shader has `sparklestrength` and `sparklescale`): the surface is cut into small cells, each
-   * with a random tilt, and a cell whose tilted face looks at the viewer glints, so the glints move as the board
-   * turns. Added to the specular light after three.js's own lighting.
-   */
-  function gritty(m: THREE.MeshStandardMaterial): void {
-    m.normalScale.set(1.8, 1.8);
-    m.onBeforeCompile = (shader) => {
-      shader.uniforms.uSparkleScale = { value: new THREE.Vector2(380, 1520) };
-      shader.uniforms.uSparkleStrength = { value: 1.6 };
-      shader.fragmentShader = shader.fragmentShader
-        .replace(
-          '#include <common>',
-          `#include <common>
-uniform vec2 uSparkleScale;
-uniform float uSparkleStrength;
-vec3 cavemanHash(vec2 p) {
-  vec3 q = vec3(dot(p, vec2(127.1, 311.7)), dot(p, vec2(269.5, 183.3)), dot(p, vec2(419.2, 371.9)));
-  return fract(sin(q) * 43758.5453);
-}`
-        )
-        .replace(
-          '#include <lights_fragment_end>',
-          `#include <lights_fragment_end>
-#ifdef USE_MAP
-{
-  vec2 cell = floor(vMapUv * uSparkleScale);
-  vec3 h = cavemanHash(cell);
-  vec3 flake = normalize(normal + (h - 0.5) * 0.9);
-  vec3 toEye = normalize(vViewPosition);
-  float facing = pow(max(dot(flake, toEye), 0.0), 160.0);
-  float lit = step(0.90, cavemanHash(cell + 17.0).x);
-  reflectedLight.directSpecular += vec3(facing * lit * uSparkleStrength);
-}
-#endif`
-        );
-    };
-    m.needsUpdate = true;
   }
 
   /** A lane's pose from the stream: scale, rotation and position in its parent's frame. */
@@ -329,7 +285,7 @@ vec3 cavemanHash(vec2 p) {
         if (disposed) return;
         disposeDeck();
         modelPath = path;
-        const lanes: string[] = (gltf.scene.getObjectByName(LANES[0])?.userData?.caveman?.lanes as string[] | undefined) ?? LANES;
+        const lanes = lanesOf(gltf.scene);
         lanes.forEach((name, i) => {
           laneNodes[i] = gltf.scene.getObjectByName(name) ?? null;
         });

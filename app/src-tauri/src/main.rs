@@ -285,16 +285,85 @@ async fn board_model(app: AppHandle, state: State<'_, AppState>, force: bool) ->
     .map_err(|e| e.to_string())??;
     eprintln!("board model: {facts}");
     // older models go (the newest six stay: the loadouts the player switches between)
-    if let Ok(entries) = std::fs::read_dir(&dir) {
+    prune_models(&dir, 6);
+    Ok(out.display().to_string())
+}
+
+/// Removes all but the newest `keep` models of a cache folder.
+fn prune_models(dir: &Path, keep: usize) {
+    if let Ok(entries) = std::fs::read_dir(dir) {
         let mut files: Vec<(std::time::SystemTime, PathBuf)> = entries
             .flatten()
             .filter_map(|e| Some((e.metadata().ok()?.modified().ok()?, e.path())))
             .filter(|(_, p)| p.extension().is_some_and(|x| x == "glb"))
             .collect();
         files.sort_by_key(|x| std::cmp::Reverse(x.0));
-        for (_, p) in files.into_iter().skip(6) {
+        for (_, p) in files.into_iter().skip(keep) {
             let _ = std::fs::remove_file(p);
         }
+    }
+}
+
+/// The board for the Studio's 3D preview: the stock board as the game draws it (the deck mesh, black grip, the
+/// default trucks, natural wheels), or with one of the player's own wheels on it (`wheel`, its PNG, in `colour`,
+/// "#rrggbb", as the build would make it), built from the player's install like the board cam's (`board_model`) and
+/// cached beside it: one file per game build, Caveman version and wheel (its path, size, time and colour). Builds
+/// take turns, and a model is written under another name and renamed, so a preview never reads half a file.
+#[tauri::command]
+async fn studio_board_model(app: AppHandle, state: State<'_, AppState>, wheel: Option<String>, colour: Option<String>) -> Result<String, String> {
+    use caveman_core::boardmodel::{self, Loadout, OwnWheel};
+    let config = current(&app, &state)?;
+    let game_dir = config.game_dir();
+    let exe = std::fs::metadata(game_dir.join("Skate.exe")).map_err(|e| format!("Skate.exe: {e}"))?;
+    let seconds = |m: &std::fs::Metadata| m.modified().ok().and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok()).map(|d| d.as_secs()).unwrap_or(0);
+    let rgb = colour.as_deref().and_then(|c| {
+        let h = c.trim_start_matches('#');
+        (h.len() == 6).then(|| [0, 2, 4].map(|i| u8::from_str_radix(&h[i..i + 2], 16).unwrap_or(255)))
+    });
+    // the wheel's part of the file name: a hash of what makes its look
+    let mut h: u64 = 0xcbf2_9ce4_8422_2325;
+    let wheel_key = match &wheel {
+        None => "stock".to_string(),
+        Some(path) => {
+            let meta = std::fs::metadata(path).map_err(|e| format!("{path}: {e}"))?;
+            let text = format!("{}|{}|{}|{rgb:?}", path.to_lowercase(), meta.len(), seconds(&meta));
+            for b in text.bytes() {
+                h ^= b as u64;
+                h = h.wrapping_mul(0x0000_0100_0000_01b3);
+            }
+            format!("{h:016x}")
+        }
+    };
+    let dir = app.path().app_cache_dir().map_err(|e| e.to_string())?.join("studio-board");
+    let out = dir.join(format!("studio-{}-{}-{}-{wheel_key}.glb", env!("CARGO_PKG_VERSION"), exe.len(), seconds(&exe)));
+    if out.is_file() {
+        return Ok(out.display().to_string());
+    }
+    let target = out.clone();
+    let built = tauri::async_runtime::spawn_blocking(move || -> Result<Option<String>, String> {
+        static BUILDING: Mutex<()> = Mutex::new(());
+        let _one_at_a_time = BUILDING.lock().unwrap_or_else(|e| e.into_inner());
+        if target.is_file() {
+            return Ok(None);
+        }
+        let own = match &wheel {
+            Some(path) => {
+                Some(OwnWheel { face: caveman_core::image::Image::read_png(path).map_err(|e| format!("{path}: {e}"))?, colour: rgb.unwrap_or([255, 255, 255]) })
+            }
+            None => None,
+        };
+        let game = caveman_core::game::Game::open(&game_dir).map_err(|e| format!("the game at {}: {e}", game_dir.display()))?;
+        let part = target.with_extension("glb.part");
+        let facts = boardmodel::build_with(&game, &Loadout::stock(), own.as_ref(), &part).map_err(|e| e.to_string())?;
+        std::fs::rename(&part, &target).map_err(|e| format!("{}: {e}", target.display()))?;
+        Ok(Some(facts))
+    })
+    .await
+    .map_err(|e| e.to_string())??;
+    if let Some(facts) = built {
+        eprintln!("studio board model: {facts}");
+        // the stock board and the last few wheels looked at
+        prune_models(&dir, 6);
     }
     Ok(out.display().to_string())
 }
@@ -871,6 +940,7 @@ fn main() {
             launch,
             attach_dll,
             set_items_off,
+            studio_board_model,
             launcher_status,
             templates_save,
             pack_build,
