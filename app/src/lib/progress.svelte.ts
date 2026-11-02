@@ -1,6 +1,7 @@
 // A build's progress for whoever waits on it (the Play button, the Studio's build log), from the build's events as
 // `caveman --json` prints them: the scan reads each picture (`scanned` gives the counts, then an `item`, `skipped` or
-// `warning` per file), the build places each item in the mod (`progress`, stage "items", `done` of `total`), writes
+// `warning` per file), the build places each item in the mod (`progress`, stage "items", `done` of `total`, and the
+// item it is on now; the label counts from 1, the item in hand), writes
 // the mod's files (`progress`, stage "writing", `mb`) and the shader effects (`progress`, stage "shaders"). The
 // counts and the time since the last event are real: a build that stops moving shows it.
 
@@ -100,15 +101,22 @@ export class BuildProgress {
     return from + (to - from) * Math.min(Math.max(within, 0), 1);
   }
 
+  /** `n` of the total, counted from 1 (1 of 1,325 as a stage starts, 1,325 at its last), with the item named below. */
+  private of(n: number): string {
+    return `${count(Math.min(Math.max(n, 1), this.total))} of ${count(this.total)}`;
+  }
+
   /** What it is doing, with the counts. */
   get label(): string {
     switch (this.stage) {
       case 'starting':
         return 'Starting';
       case 'reading':
-        return `Reading the pictures: ${count(this.done)} of ${count(this.total)}`;
+        // each picture's event comes once it is read: the count and the name are of that picture
+        return `Reading the pictures: ${this.of(this.done)}`;
       case 'items':
-        return `Building: ${count(this.done)} of ${count(this.total)}`;
+        // `done` items are in; the build is on the next, the one the event names
+        return `Building: ${this.of(this.done + 1)}`;
       case 'writing':
         return this.mb !== null ? `Writing the mod files (${count(this.mb)} MB)` : 'Writing the mod files';
       case 'shaders':

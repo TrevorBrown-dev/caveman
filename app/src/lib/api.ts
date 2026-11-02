@@ -213,11 +213,14 @@ export async function build(force: boolean, onEvent: (e: BuildEvent) => void): P
     onEvent({ event: 'item', kind: 'deck', display: deck.display, notes: deck.notes });
   }
   onEvent({ event: 'ready', decks: on.length, wheels: 0 });
+  // as the real build: one event as the items start, then one after each, naming the item it is on now
+  onEvent({ event: 'progress', stage: 'items', done: 0, total: on.length, display: on[0]?.display ?? null });
   let done = 0;
   for (const deck of on) {
     await wait(40 * step);
     onEvent({ event: 'log', message: `  built ${deck.display} (${deck.key})` });
-    onEvent({ event: 'progress', stage: 'items', done: ++done, total: on.length, display: deck.display });
+    done++;
+    onEvent({ event: 'progress', stage: 'items', done, total: on.length, display: on[done]?.display ?? null });
   }
   onEvent({ event: 'progress', stage: 'writing', mb: Math.round(on.length * 1.2) });
   await wait(300 * step);

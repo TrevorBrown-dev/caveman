@@ -4,9 +4,15 @@
 //!
 //! An item's entry is named by a hash of everything its pieces depend on: the build's inputs for it (the art file's
 //! bytes and its effects, hashed by the caller into `input`), its display name and key, the mod it goes into, the
-//! game build (templates and thumbnail lighting come from the game) and the engine itself (this executable's bytes,
-//! so a new Caveman never reuses an old Caveman's pieces). Entries live in `<cache>/items/<mod folder hash>/`; a build
-//! removes the entries of items it no longer has.
+//! game build (templates and thumbnail lighting come from the game) and the builder's version, [`CACHE_VERSION`].
+//! Entries live in `<cache>/items/<mod folder hash>/`; a build removes the entries of items it no longer has.
+//!
+//! The builder's version is a number bumped by hand, not this executable's identity: until 2026-11-02 the entries
+//! were named by a hash of the running program's bytes, so every update of Caveman (and every rebuild of the app,
+//! even of its pages alone) re-encoded a whole library, minutes for a thousand decks (Trevor: "ideally an update
+//! shouldn't break the cache"); the app and the command line also missed each other's entries. A test
+//! (`tests/item_cache_version.rs`) fails when the builder's sources change, so a change that makes different pieces
+//! cannot slip out without the bump.
 //!
 //! The pieces are recorded as operations on a mod (add an EBX, a resource, a chunk), with every byte already encoded,
 //! so a cached item is replayed into a build exactly as it was first built. Its GUIDs and resource ids come from the
@@ -15,15 +21,17 @@
 
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
-use std::sync::{Mutex, OnceLock};
+use std::sync::Mutex;
 
 use crate::ebx::Guid;
 use crate::image::Image;
 use crate::toc;
 
-/// Bump when the build's output for the same inputs changes in a way the engine identity would not catch (the engine
-/// identity already covers any change to the executable).
-pub const CACHE_VERSION: &str = "caveman-items-1";
+/// The builder's version: bump it when the build makes different pieces for an item from the same inputs (its
+/// textures, EBX, chunks, ids, thumbnail, or this file's own format), so every player's cache rebuilds once. Leave it
+/// for changes that make the same pieces (logging, comments, refactors, speed). `tests/item_cache_version.rs` asks
+/// for that decision whenever the builder's sources change.
+pub const CACHE_VERSION: &str = "caveman-items-2";
 const MAGIC: &[u8; 16] = b"CAVEMAN-ITEM\0v1\0";
 
 /// FNV-1a 64 over length-prefixed parts: the cache's content hash (fast enough for multi-megabyte PNGs).
@@ -40,15 +48,6 @@ pub fn hash64(parts: &[&[u8]]) -> u64 {
         eat(p);
     }
     h
-}
-
-/// This executable's identity: a hash of its bytes (computed once per process). A rebuilt Caveman gets new entries.
-pub fn engine_id() -> u64 {
-    static ID: OnceLock<u64> = OnceLock::new();
-    *ID.get_or_init(|| {
-        let bytes = std::env::current_exe().ok().and_then(|p| std::fs::read(p).ok()).unwrap_or_default();
-        hash64(&[CACHE_VERSION.as_bytes(), env!("CARGO_PKG_VERSION").as_bytes(), &bytes])
-    })
 }
 
 /// One recorded change to a mod: the pieces of an item, already encoded (Kraken) as they go into the mod's archive.
@@ -277,7 +276,6 @@ impl ItemCache {
     pub fn entry(kind: &str, mod_name: &str, key: &str, display: &str, input: u64, salt: u32, seed: u64, game_id: (u64, i64)) -> String {
         let h = hash64(&[
             CACHE_VERSION.as_bytes(),
-            &engine_id().to_le_bytes(),
             &game_id.0.to_le_bytes(),
             &game_id.1.to_le_bytes(),
             kind.as_bytes(),

@@ -16,6 +16,7 @@ pub mod brt;
 pub mod build;
 pub mod bundle;
 pub mod cas;
+pub mod colour;
 pub mod ebx;
 pub mod effects;
 pub mod fxmod;

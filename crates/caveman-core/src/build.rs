@@ -1900,9 +1900,9 @@ fn cutout_ctx(game: &Game, shared: &game::Bundle) -> Result<CutoutCtx> {
     })
 }
 
-/// The grit in a colour, as the game's tint shows it (boardmodel::coloured, which matches the menu). `colour` sRGB.
+/// The grit in a colour, as the game's tint shows it (colour::coloured, which matches the menu). `colour` sRGB.
 fn tinted_grit(grit: &Image, colour: [u8; 3]) -> Image {
-    crate::boardmodel::coloured(grit, colour.map(|v| thumbs::srgb_to_linear(v as f64) as f32)).to_rgb()
+    crate::colour::coloured(grit, colour.map(|v| thumbs::srgb_to_linear(v as f64) as f32)).to_rgb()
 }
 
 /// Everything one grip adds to the mod, recorded: a plain colour is the host preset with the tint set (the template
@@ -1984,7 +1984,7 @@ fn cutout_product(ctx: &CutoutCtx, root: &Path, spec: &CutoutSpec, ids: &mut Ids
         dst.copy_from_slice(&[src[0], CUTOUT_GB[0], CUTOUT_GB[1]]);
     }
     add_texture(&mut rec, ids, &ctx.host_name, &ctx.osk_t, &tex_name, &mip_chain(&osk, GRIP_LEVELS, false, bc1::encode))?;
-    let black = crate::boardmodel::coloured(&ctx.grit, GRIP_BLACK).to_rgb();
+    let black = crate::colour::coloured(&ctx.grit, GRIP_BLACK).to_rgb();
     let small = thumbs::render_top(&black, Some(&spec.mask), &ctx.top.wood, &ctx.top.wood_mask, &ctx.top.shapes[0]);
     let large = thumbs::render_top(&black, Some(&spec.mask), &ctx.top.wood, &ctx.top.wood_mask, &ctx.top.shapes[1]);
     let cdn_refs = add_thumbnails(&mut rec, ids, &ctx.t, &base, [&small, &large])?;

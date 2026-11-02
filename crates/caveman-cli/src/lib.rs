@@ -636,18 +636,26 @@ pub fn run(o: &Options, report: &mut Reporter) -> Result<Outcome> {
         return Ok(if shaders == Shaders::Removed { Outcome::Built { decks: 0, wheels: 0, grips: 0, cutouts: 0, shaders } } else { Outcome::Nothing });
     }
 
-    // the build's progress for a program reading the JSON (the app's progress bar): a `progress` event per item placed
-    // (`stage` "items", `done` of `total`, its `display`), and one as the mod's files are written (`stage` "writing",
-    // `mb`); the shader effects' follows below
+    // the build's progress for a program reading the JSON (the app's progress bar): a `progress` event as the items
+    // start and after each one is placed (`stage` "items", `done` of `total`, and the `display` of the item it is on
+    // now, the next in the build's order: decks, wheels, grips, patterns; none after the last), and one as the mod's
+    // files are written (`stage` "writing", `mb`); the shader effects' follows below
     let total = decks.len() + wheels.len() + grips.len() + cutouts.len();
+    let order: Vec<&str> = decks
+        .iter()
+        .map(|d| d.display.as_str())
+        .chain(wheels.iter().map(|w| w.display.as_str()))
+        .chain(grips.iter().map(|g| g.display.as_str()))
+        .chain(cutouts.iter().map(|c| c.display.as_str()))
+        .collect();
+    report.event(json!({"event": "progress", "stage": "items", "done": 0, "total": total, "display": order.first()}));
     let built = {
         let mut done = 0usize;
         let mut log = |line: &str| {
             report.log(line);
-            if let Some(rest) = line.strip_prefix(build::BUILT_LINE) {
+            if line.starts_with(build::BUILT_LINE) {
                 done += 1;
-                let display = rest.rsplit_once(" (").map_or(rest, |(d, _)| d);
-                report.event(json!({"event": "progress", "stage": "items", "done": done, "total": total, "display": display}));
+                report.event(json!({"event": "progress", "stage": "items", "done": done, "total": total, "display": order.get(done)}));
             } else if let Some(rest) = line.strip_prefix(build::WRITING_LINE) {
                 let mb = rest.split(' ').next().and_then(|n| n.parse::<u64>().ok());
                 report.event(json!({"event": "progress", "stage": "writing", "mb": mb}));
@@ -763,13 +771,16 @@ fn has_png(dir: &Path) -> bool {
     false
 }
 
-/// What a build depends on (caveman.fingerprint): every PNG and settings file under the two folders (path, size,
-/// time), the options, and Caveman itself (this executable's size and time, and the engine's version). Equal
-/// fingerprints mean the mod on disk is already what a build would write.
+/// What a build depends on (caveman.fingerprint): every PNG and settings file under the drop folders (path, size,
+/// time), the options, Caveman's version and the item builder's (`item_cache::CACHE_VERSION`). Equal fingerprints mean
+/// the mod on disk is already what a build would write. Not the executable's own size and time (as until 2026-11-02):
+/// the app and the command line wrote different stamps then, and every rebuild of the app, of its pages alone, asked
+/// for a build. A new version of Caveman still builds once, from the item cache, for what it changed around the items.
 pub fn fingerprint(o: &Options, decks_dir: &Path, wheels_dir: &Path, grips_dir: &Path, patterns_dir: &Path) -> Result<String> {
     let mut text = format!(
-        "caveman {}|game {}|mod {}|prefix {:?}|decks {}|wheels {}|grips {}|patterns {}|author {:?}\n",
+        "caveman {}|items {}|game {}|mod {}|prefix {:?}|decks {}|wheels {}|grips {}|patterns {}|author {:?}\n",
         env!("CARGO_PKG_VERSION"),
+        caveman_core::item_cache::CACHE_VERSION,
         absolute(&o.game).display(),
         o.mod_name,
         o.prefix,
@@ -781,11 +792,6 @@ pub fn fingerprint(o: &Options, decks_dir: &Path, wheels_dir: &Path, grips_dir: 
     );
     for (label, dir) in [("deck", decks_dir), ("wheel", wheels_dir), ("grip", grips_dir), ("pattern", patterns_dir)] {
         walk(dir, dir, label, &mut text);
-    }
-    if let Ok(exe) = std::env::current_exe() {
-        if let Ok(md) = std::fs::metadata(&exe) {
-            text.push_str(&format!("exe {}|{}\n", md.len(), mtime_ns(&md)));
-        }
     }
     Ok(build::sha256(text.as_bytes()).iter().map(|b| format!("{b:02x}")).collect())
 }
