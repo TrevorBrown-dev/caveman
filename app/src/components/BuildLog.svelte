@@ -1,15 +1,18 @@
 <script lang="ts">
   import type { BuildEvent, BuildResult } from '../lib/types';
+  import type { BuildProgress } from '../lib/progress.svelte';
 
   interface Props {
     events: BuildEvent[];
     result: BuildResult | null;
     error: string | null;
     building: boolean;
+    /** The running build's progress (its counts, its time, a bar). */
+    progress?: BuildProgress | null;
     open: boolean;
     ontoggle: () => void;
   }
-  let { events, result, error, building, open, ontoggle }: Props = $props();
+  let { events, result, error, building, progress = null, open, ontoggle }: Props = $props();
 
   const warnings = $derived(events.filter((e) => e.event === 'warning' || e.event === 'skipped'));
   const items = $derived(events.filter((e) => e.event === 'item').length);
@@ -38,6 +41,7 @@
   }
 
   const summary = $derived.by(() => {
+    if (building && progress) return `${progress.label}  (${progress.elapsed})${progress.quiet !== null ? `: no progress for ${progress.quiet} s` : ''}`;
     if (building) return `Building... ${items} item(s) read`;
     if (error) return `Build failed: ${error}`;
     if (!result) return 'No build yet this session';
@@ -55,6 +59,11 @@
     {#if warnings.length > 0}<span class="warn">{warnings.length} warning(s)</span>{/if}
     <span class="chev">{open ? 'Hide log' : 'Show log'}</span>
   </button>
+  {#if building && progress}
+    <div class="track" role="progressbar" aria-label="Build progress" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(progress.fraction * 100)}>
+      <div class="fill" style:width={`${(progress.fraction * 100).toFixed(1)}%`}></div>
+    </div>
+  {/if}
   {#if open}
     <pre class="lines mono">{#each events as e, i (i)}{line(e)}
 {/each}{#if events.length === 0}The build's progress shows here.{/if}</pre>
@@ -106,6 +115,15 @@
     50% {
       opacity: 0.35;
     }
+  }
+  .track {
+    height: 3px;
+    background: var(--line);
+  }
+  .fill {
+    height: 100%;
+    background: var(--accent);
+    transition: width 0.3s linear;
   }
   .lines {
     margin: 0;

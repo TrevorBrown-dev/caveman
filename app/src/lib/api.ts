@@ -197,15 +197,22 @@ export async function build(force: boolean, onEvent: (e: BuildEvent) => void): P
   const lib = await library();
   const start = performance.now();
   const on = lib.decks.filter((d) => d.enabled);
-  onEvent({ event: 'scanned', kind: 'deck', count: lib.decks.length });
+  // (slow enough to watch the progress: `?slowbuild` in the address makes each step about half a second)
+  const step = new URLSearchParams(window.location.search).has('slowbuild') ? 8 : 1;
+  onEvent({ event: 'scanned', kind: 'deck', count: on.length });
   for (const deck of on) {
-    await wait(60);
+    await wait(60 * step);
     onEvent({ event: 'item', kind: 'deck', display: deck.display, notes: deck.notes });
   }
+  onEvent({ event: 'ready', decks: on.length, wheels: 0 });
+  let done = 0;
   for (const deck of on) {
-    await wait(40);
+    await wait(40 * step);
     onEvent({ event: 'log', message: `  built ${deck.display} (${deck.key})` });
+    onEvent({ event: 'progress', stage: 'items', done: ++done, total: on.length, display: deck.display });
   }
+  onEvent({ event: 'progress', stage: 'writing', mb: Math.round(on.length * 1.2) });
+  await wait(300 * step);
   onEvent({ event: 'built', decks: on.length, wheels: lib.wheels.length });
   return {
     outcome: 'built',

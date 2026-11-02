@@ -55,6 +55,14 @@ impl Reporter {
         self.say(text, json!({"event": "log", "message": text}));
     }
 
+    /// An event for a program reading the JSON (the build's progress); nothing in text mode, where the lines say it.
+    pub fn event(&mut self, event: Value) {
+        if self.json {
+            let _ = writeln!(self.out, "{event}");
+            let _ = self.out.flush();
+        }
+    }
+
     /// A file left out, and why.
     pub fn skipped(&mut self, kind: Kind, path: &Path, reason: &str) {
         let text = format!("  skipped {}: {reason}", file_name(path));

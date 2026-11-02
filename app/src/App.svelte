@@ -13,6 +13,7 @@
   import * as live from './lib/live';
   import * as widgets from './lib/widgets';
   import { ENTRIES } from './lib/changelog';
+  import { BuildProgress } from './lib/progress.svelte';
   import { pluginsOf, type Config, type LauncherStatus, type Library as Lib, type PluginsConfig } from './lib/types';
 
   type View = 'home' | 'plugins' | 'studio' | 'console';
@@ -24,6 +25,7 @@
   let gameRunning = $state(false);
   let injected = $state<boolean | null>(null);
   let playing = $state(false);
+  const playProgress = new BuildProgress();
   let showSettings = $state(false);
   let showChangelogs = $state(false);
   /** Which widget windows are open, by kind (the back end says, `widget-state`). */
@@ -220,7 +222,9 @@
     if (playing || gameRunning) return;
     playing = true;
     try {
-      const built = await api.build(false, () => {});
+      playProgress.start();
+      const built = await api.build(false, (e) => playProgress.feed(e));
+      playProgress.finish();
       if (built.outcome === 'built') say(`Built ${built.decks} deck(s) and ${built.wheels} wheel(s)`);
       const attach = await api.launch();
       sessionAttached = !!attach;
@@ -229,6 +233,7 @@
     } catch (e) {
       say(String(e), 'error');
     } finally {
+      playProgress.finish();
       playing = false;
     }
   }
@@ -279,7 +284,7 @@
 <div class="app">
   <div class="bg" aria-hidden="true"></div>
   {#if view === 'home'}
-    <Home {status} {gameRunning} {injected} {version} {plugins} {playing} onopen={(v) => (view = v)} onplay={play} onsettings={() => (showSettings = true)} onchangelogs={() => (showChangelogs = true)} />
+    <Home {status} {gameRunning} {injected} {version} {plugins} {playing} progress={playProgress} onopen={(v) => (view = v)} onplay={play} onsettings={() => (showSettings = true)} onchangelogs={() => (showChangelogs = true)} />
     {#if api.isMock}<span class="mock">mock data</span>{/if}
   {:else}
     <div class="page">

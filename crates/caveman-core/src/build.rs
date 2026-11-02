@@ -2118,6 +2118,12 @@ impl ItemSpec for WheelSpec {
 /// (a whole imported collection is over a thousand decks, about 3.6 MB each with the thumbnails).
 const BATCH: usize = 64;
 
+/// How the log line of each item placed in the mod starts (`  built <display> (<key>)`): the command line counts
+/// them to report the build's progress.
+pub const BUILT_LINE: &str = "  built ";
+/// How the log line before the mod's files are written starts, followed by the archive's size (`<n> MB`).
+pub const WRITING_LINE: &str = "  writing the mod: ";
+
 /// The items of one kind, each from the item cache (salt 0) when it is there, the rest built in parallel. Entries
 /// written for new items; notes on cache writes that failed go to `notes`.
 impl ItemSpec for GripSpec {
@@ -2285,7 +2291,7 @@ pub fn build(
                     icon = deck_icon;
                 }
                 built_decks.push(item);
-                log(&format!("  built {} ({})", spec.display, spec.key));
+                log(&format!("{BUILT_LINE}{} ({})", spec.display, spec.key));
             }
         }
     }
@@ -2325,7 +2331,7 @@ pub fn build(
                     icon = item.thumbnail.as_ref().map(|t| t.resize_lanczos(256, 256));
                 }
                 built_wheels.push(item);
-                log(&format!("  built {} ({})", spec.display, spec.key));
+                log(&format!("{BUILT_LINE}{} ({})", spec.display, spec.key));
             }
         }
     }
@@ -2364,7 +2370,7 @@ pub fn build(
                     icon = item.thumbnail.as_ref().map(|t| t.resize_lanczos(256, 256));
                 }
                 built_grips.push(item);
-                log(&format!("  built {} ({})", spec.display, spec.key));
+                log(&format!("{BUILT_LINE}{} ({})", spec.display, spec.key));
             }
         }
     }
@@ -2404,7 +2410,7 @@ pub fn build(
                     icon = item.thumbnail.as_ref().map(|t| t.resize_lanczos(256, 256));
                 }
                 built_cutouts.push(item);
-                log(&format!("  built {} ({})", spec.display, spec.key));
+                log(&format!("{BUILT_LINE}{} ({})", spec.display, spec.key));
             }
         }
     }
@@ -2455,6 +2461,7 @@ pub fn build(
     let bundles = p.bundles.len();
     let chunks = p.chunks.len();
     let icon = icon.map(|i| i.to_rgba());
+    log(&format!("{WRITING_LINE}{} MB", p.cas.len().div_ceil(1 << 20)));
     let (cas_bytes, toc_bytes) =
         p.write(&mod_dir, mod_name, &description, &readme, icon.as_ref(), &opts.tool_version, opts.author.as_deref().unwrap_or("Caveman"))?;
     if cache.enabled() {

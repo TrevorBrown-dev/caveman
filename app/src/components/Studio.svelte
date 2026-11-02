@@ -9,6 +9,7 @@
   import Packs from './Packs.svelte';
   import * as api from '../lib/api';
   import { sameModel, toModel, toSettings, type EditModel } from '../lib/effects';
+  import { BuildProgress } from '../lib/progress.svelte';
   import type { BuildEvent, BuildResult, Config, Library as Lib, LibraryItem } from '../lib/types';
 
   interface Props {
@@ -39,6 +40,7 @@
   let buildResult = $state<BuildResult | null>(null);
   let buildError = $state<string | null>(null);
   let logOpen = $state(false);
+  const progress = new BuildProgress();
   let templates = $state<string | null>(null);
 
   const model: EditModel | null = $derived(deck ? drafts[deck.source] ?? toModel(deck.settings) : null);
@@ -157,16 +159,34 @@
     buildError = null;
     buildResult = null;
     logOpen = true;
+    progress.start();
+    // a big library sends thousands of events: the log takes them in a few times a second, not one by one
+    let pending: BuildEvent[] = [];
+    let flush: ReturnType<typeof setTimeout> | null = null;
+    const take = (): void => {
+      buildEvents = [...buildEvents, ...pending];
+      pending = [];
+      flush = null;
+    };
     try {
-      buildResult = await api.build(false, (e) => (buildEvents = [...buildEvents, e]));
+      buildResult = await api.build(false, (e) => {
+        progress.feed(e);
+        pending.push(e);
+        flush ??= setTimeout(take, 200);
+      });
+      if (flush) clearTimeout(flush);
+      take();
       await onrefresh();
       onbuilt?.();
       if (buildResult.outcome === 'built') onsay(`Built ${buildResult.decks} deck(s) in ${buildResult.seconds.toFixed(1)} s`);
       else if (buildResult.outcome === 'up_to_date') onsay('The mods are up to date');
     } catch (e) {
+      if (flush) clearTimeout(flush);
+      take();
       buildError = String(e);
       onsay(buildError, 'error');
     } finally {
+      progress.finish();
       building = false;
     }
   }
@@ -223,7 +243,7 @@
           title={deck ? `${deck.display}${dirty ? '  (unsaved)' : ''}` : 'No deck selected'}
           onautocolour={(c) => (autoColour = c)}
         />
-        <BuildLog events={buildEvents} result={buildResult} error={buildError} {building} open={logOpen} ontoggle={() => (logOpen = !logOpen)} />
+        <BuildLog events={buildEvents} result={buildResult} error={buildError} {building} {progress} open={logOpen} ontoggle={() => (logOpen = !logOpen)} />
       </div>
       <Editor
         item={selected?.kind === 'wheel' ? selected : deck}

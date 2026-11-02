@@ -636,8 +636,23 @@ pub fn run(o: &Options, report: &mut Reporter) -> Result<Outcome> {
         return Ok(if shaders == Shaders::Removed { Outcome::Built { decks: 0, wheels: 0, grips: 0, cutouts: 0, shaders } } else { Outcome::Nothing });
     }
 
+    // the build's progress for a program reading the JSON (the app's progress bar): a `progress` event per item placed
+    // (`stage` "items", `done` of `total`, its `display`), and one as the mod's files are written (`stage` "writing",
+    // `mb`); the shader effects' follows below
+    let total = decks.len() + wheels.len() + grips.len() + cutouts.len();
     let built = {
-        let mut log = |line: &str| report.log(line);
+        let mut done = 0usize;
+        let mut log = |line: &str| {
+            report.log(line);
+            if let Some(rest) = line.strip_prefix(build::BUILT_LINE) {
+                done += 1;
+                let display = rest.rsplit_once(" (").map_or(rest, |(d, _)| d);
+                report.event(json!({"event": "progress", "stage": "items", "done": done, "total": total, "display": display}));
+            } else if let Some(rest) = line.strip_prefix(build::WRITING_LINE) {
+                let mb = rest.split(' ').next().and_then(|n| n.parse::<u64>().ok());
+                report.event(json!({"event": "progress", "stage": "writing", "mb": mb}));
+            }
+        };
         build::build(game.clone(), &decks, &wheels, &grips, &cutouts, &mods_dir, &o.mod_name, &bopts, &mut log)?
     };
     // the menu thumbnails of wheels, grips and patterns are their previews (decks render their own)
@@ -654,6 +669,7 @@ pub fn run(o: &Options, report: &mut Reporter) -> Result<Outcome> {
         }
     }
     let shaders = if needs_shaders {
+        report.event(json!({"event": "progress", "stage": "shaders"}));
         let stats = build_shader_mod(&game, &shader_dir, &ShaderModOptions { title: "Caveman Shaders".into(), built: None, animated })?;
         let text =
             format!("Built the shader effects into {} ({} KB{})", shader_dir.display(), stats.cas / 1024, if animated { ", with animated decks" } else { "" });

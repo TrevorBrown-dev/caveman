@@ -4,6 +4,7 @@
   import type { LauncherStatus, PluginsConfig } from '../lib/types';
   import { LATEST } from '../lib/changelog';
   import { WIDGETS } from '../lib/widgets';
+  import type { BuildProgress } from '../lib/progress.svelte';
 
   interface Props {
     status: LauncherStatus | null;
@@ -14,12 +15,14 @@
     plugins: PluginsConfig;
     /** A build runs before the launch. */
     playing: boolean;
+    /** That build's progress. */
+    progress?: BuildProgress | null;
     onopen: (view: 'plugins' | 'studio' | 'console') => void;
     onplay: () => void;
     onsettings: () => void;
     onchangelogs: () => void;
   }
-  let { status, gameRunning, injected, version, plugins, playing, onopen, onplay, onsettings, onchangelogs }: Props = $props();
+  let { status, gameRunning, injected, version, plugins, playing, progress = null, onopen, onplay, onsettings, onchangelogs }: Props = $props();
 
   type Mark = 'ok' | 'warn' | 'bad';
   interface Line {
@@ -120,9 +123,20 @@
       </span>
       <span class="nav-icon" aria-hidden="true">&#9998;</span>
     </button>
-    <button class="play" disabled={playing || gameRunning} onclick={onplay}>
+    <button class="play" class:building={playing} disabled={playing || gameRunning} onclick={onplay}>
       <span class="play-title">{playing ? 'Building...' : gameRunning ? 'Playing' : 'Play'}</span>
-      <span class="play-sub">{gameRunning ? 'skate. is running' : status?.reskateVersion ? `ReSkate ${status.reskateVersion}` : 'ReSkate'}</span>
+      {#if playing && progress}
+        <!-- the build's own counts and the time since it started; a build that stops sending says so -->
+        <span class="play-progress">
+          <span class="play-sub play-line"><span>{progress.label}</span><span class="play-time">{progress.elapsed}</span></span>
+          <span class="play-bar" role="progressbar" aria-label="Build progress" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(progress.fraction * 100)}>
+            <span class="play-fill" style:width={`${(progress.fraction * 100).toFixed(1)}%`}></span>
+          </span>
+          <span class="play-current">{progress.quiet !== null ? `No progress for ${progress.quiet} s` : (progress.current ?? '')}</span>
+        </span>
+      {:else}
+        <span class="play-sub">{gameRunning ? 'skate. is running' : status?.reskateVersion ? `ReSkate ${status.reskateVersion}` : 'ReSkate'}</span>
+      {/if}
     </button>
   </div>
 </div>
@@ -395,6 +409,48 @@
   .play-sub {
     font-size: 14px;
     font-weight: 600;
+  }
+  /* building: full colour (not the disabled dim), the counts, a bar in the button's ink and the item being built */
+  .play.building:disabled {
+    opacity: 1;
+    cursor: progress;
+  }
+  .play-progress {
+    align-self: stretch;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    min-width: 0;
+  }
+  .play-line {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+  }
+  .play-time {
+    font-variant-numeric: tabular-nums;
+  }
+  .play-bar {
+    display: block;
+    height: 6px;
+    border-radius: 3px;
+    background: rgba(0, 0, 0, 0.18);
+    overflow: hidden;
+  }
+  .play-fill {
+    display: block;
+    height: 100%;
+    border-radius: 3px;
+    background: var(--accent-ink);
+    transition: width 0.3s linear;
+  }
+  .play-current {
+    min-height: 1.3em;
+    font-size: 12px;
+    opacity: 0.75;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
   @media (max-width: 1240px) {
     .home {
