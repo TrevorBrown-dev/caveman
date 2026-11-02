@@ -29,6 +29,17 @@ const NYAN_HEIGHT = 0.07; // above the ground, as Caveman attaches it
 const NYAN_STEP = 0.32; // metres per band step (the game's step length is not known)
 const AURA_WIDTH = 0.06;
 const EXPOSURE = 0.95;
+/**
+ * The lights on the board at the light slider's 100% (the room's reflection, the key light, the sky): a print deck's
+ * art comes out about as bright as the picture itself (measured on a print: 0.62 mean value on the board, 0.63 in the
+ * PNG). They were half as bright again before 2026-11-02, which washed the colours out (saturation 0.40 against 0.61).
+ */
+const ROOM_LIGHT = 0.6;
+const KEY_LIGHT = 0.72;
+const SKY_LIGHT = 0.23;
+/** The light slider's range: a share of the lights above. */
+export const LIGHT_MIN = 0.3;
+export const LIGHT_MAX = 2;
 const SHOWCASE_BG = '#121016'; // the app's background, so the view has no edge
 const RIDE_BG = '#0d0c12';
 
@@ -121,6 +132,8 @@ export class Preview {
   private groundTexture: THREE.CanvasTexture;
   private shadow: THREE.Mesh;
   private auraLights: THREE.PointLight[] = [];
+  private keyLight: THREE.DirectionalLight;
+  private skyLight: THREE.HemisphereLight;
   private auraHalos: THREE.Sprite[] = [];
   private nyanMesh: THREE.Mesh;
   private auraMeshes: THREE.Mesh[] = [];
@@ -160,11 +173,12 @@ export class Preview {
     this.scene.background = beforeToneMapping(SHOWCASE_BG);
     const pmrem = new THREE.PMREMGenerator(this.renderer);
     this.scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
-    this.scene.environmentIntensity = 0.9;
+    this.scene.environmentIntensity = ROOM_LIGHT;
     // from the side, so the glossy kicks do not catch it as a band in the showcase
-    const key = new THREE.DirectionalLight('#ffffff', 1.1);
-    key.position.set(2.2, 1.0, 2.0);
-    this.scene.add(key, new THREE.HemisphereLight('#cfd6ff', '#221d18', 0.35));
+    this.keyLight = new THREE.DirectionalLight('#ffffff', KEY_LIGHT);
+    this.keyLight.position.set(2.2, 1.0, 2.0);
+    this.skyLight = new THREE.HemisphereLight('#cfd6ff', '#221d18', SKY_LIGHT);
+    this.scene.add(this.keyLight, this.skyLight);
 
     this.camera = new THREE.PerspectiveCamera(32, 1, 0.01, 200);
     this.camera.position.set(0, 0, 1.75);
@@ -545,6 +559,18 @@ export class Preview {
     this.mode = mode;
     this.nyanPoints = [];
     this.auraPoints = [[], []];
+  }
+
+  /**
+   * How much light falls on the board, as a share of the usual (the light slider): the room's reflection, the key
+   * light and the sky together, so the look stays the same, only dimmer or brighter. The background keeps its colour,
+   * and the aura's lights and a glowing print keep theirs (they are the deck's own light).
+   */
+  setLight(share: number): void {
+    const k = Math.min(LIGHT_MAX, Math.max(LIGHT_MIN, share));
+    this.scene.environmentIntensity = ROOM_LIGHT * k;
+    this.keyLight.intensity = KEY_LIGHT * k;
+    this.skyLight.intensity = SKY_LIGHT * k;
   }
 
   /** The view for a mode: the deck standing with its bottom to the camera, or behind the rider. */

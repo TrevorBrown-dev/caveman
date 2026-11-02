@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onDestroy, onMount, untrack } from 'svelte';
-  import { Preview, type Mode } from '../lib/preview/scene';
+  import { LIGHT_MAX, LIGHT_MIN, Preview, type Mode } from '../lib/preview/scene';
   import { readBytes, studioBoardModel } from '../lib/api';
   import type { Settings } from '../lib/types';
 
@@ -29,9 +29,37 @@
   let gameBoard = $state(false);
   let modelProblem = $state<string | null>(null);
   let modelSeq = 0;
+  /** The light slider: a share of the usual light on the board, kept in the webview's storage between sessions. */
+  const LIGHT_KEY = 'caveman.preview.light';
+  let light = $state(storedLight());
+  const lightPct = $derived(`${Math.round(light * 100)}%`);
+
+  function storedLight(): number {
+    try {
+      const v = Number(localStorage.getItem(LIGHT_KEY) ?? '1');
+      if (Number.isFinite(v) && v >= LIGHT_MIN && v <= LIGHT_MAX) return v;
+    } catch {
+      // no storage here: the usual light
+    }
+    return 1;
+  }
+
+  function setLight(v: number): void {
+    light = v;
+    preview?.setLight(v);
+  }
+
+  function keepLight(): void {
+    try {
+      localStorage.setItem(LIGHT_KEY, `${light}`);
+    } catch {
+      // not kept: the slider still works for this session
+    }
+  }
 
   onMount(() => {
     preview = new Preview(host);
+    preview.setLight(light);
     (window as unknown as { cavemanPreview: Preview }).cavemanPreview = preview;
     mounted = true;
   });
@@ -112,6 +140,25 @@
       <button class:on={mode === 'showcase'} onclick={() => setMode('showcase')}>Showcase</button>
       <button class:on={mode === 'ride'} onclick={() => setMode('ride')}>Ride</button>
       <button class="ghost" title="Reset the view" onclick={() => preview?.resetView()}>Reset view</button>
+      <span class="sep"></span>
+      <label class="light" title={`Light on the board: ${lightPct}; double-click for 100%. Kept for next time.`}>
+        <span>Light</span>
+        <input
+          type="range"
+          min={LIGHT_MIN}
+          max={LIGHT_MAX}
+          step="0.05"
+          value={light}
+          aria-valuetext={lightPct}
+          oninput={(e) => setLight(+e.currentTarget.value)}
+          onchange={keepLight}
+          ondblclick={() => {
+            setLight(1);
+            keepLight();
+          }}
+        />
+        <span class="pct">{lightPct}</span>
+      </label>
     </div>
   </div>
   {#if loading || modelNote}
@@ -193,6 +240,31 @@
   .modes button.on {
     background: var(--accent-soft);
     border-color: var(--accent);
+  }
+  .sep {
+    width: 1px;
+    align-self: stretch;
+    margin: 2px 4px;
+    background: var(--line);
+  }
+  .light {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 0 6px 0 2px;
+    font-size: 13px;
+    color: var(--text-dim);
+  }
+  .light input {
+    width: 88px;
+    margin: 0;
+  }
+  .light .pct {
+    min-width: 4ch;
+    text-align: right;
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
+    color: var(--text-faint);
   }
   .loading {
     position: absolute;
